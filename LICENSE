@@ -1,0 +1,13 @@
+This is a modified version of the mantaflow library for the paper "Accelerating
+Eulerian Fluid Simulation With Convolutional Networks".
+
+Modifications:
+
+1. Added hooks to export training data to a custom binary format.
+2. Minor modifications to the solver itself (some bug fixes and returned debug
+   information).
+3. Added new scene to generate our own training data.
+
+mantaflow is free software distributed under the GNU General Public License
+(GPL) and you should contact them if you would like to use this code in
+any commercial applications.
