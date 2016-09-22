@@ -1,3 +1,5 @@
+This is a fork of Mantaflow created by Jonathan Tompson and Kristofer Schlachter for the CNNFluids project.
+
 # Mantaflow #
 
 Mantaflow is an open-source framework targeted at fluid simulation research in Computer Graphics.
