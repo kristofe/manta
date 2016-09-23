@@ -34,6 +34,8 @@ public:
 	inline Real  getDx()       { return 1.0 / mGridSize.max(); }
 	inline Real  getTime()     { return mTimeTotal; }
 
+    PYTHON() Real dx() { return getDx(); }
+
 	//! Check dimensionality
 	inline bool is2D() const { return mDim==2; }
 	//! Check dimensionality

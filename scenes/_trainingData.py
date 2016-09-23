@@ -237,7 +237,13 @@ for simnum in range(numSims):
       em.update(sm.timestep, sm.timestep * t)
       em.addVelocities(vel, flags, bWidth)
     setWallBcs(flags=flags, vel=vel)
-   
+  
+    #addBuoyancy(density=density, vel=vel, gravity=vec3(0,-1e-3,0), flags=flags)
+    # if random.random() > 0.5:
+    #   # With prob 0.5 add in vorticity confinement (we want the network to see
+    #   # with and without it).
+    #   vorticityConfinement(vel=vel, flags=flags, strength=0.3)
+
     if t % args.frameStride == 0:
       filename = "%06d_divergent.bin" % t
       fullFilename = directory + "/" + filename 

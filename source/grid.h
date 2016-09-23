@@ -24,6 +24,7 @@ namespace Manta {
 class LevelsetGrid;
 	
 //! Base class for all grids
+
 PYTHON() class GridBase : public PbClass {
 public:
 	enum GridType { TypeNone = 0, TypeReal = 1, TypeInt = 2, TypeVec3 = 4, TypeMAC = 8, TypeLevelset = 16, TypeFlags = 32 };
@@ -99,13 +100,17 @@ public:
 	
 	PYTHON() void save(std::string name);
 	PYTHON() void load(std::string name);
-	
+
+    PYTHON() void writeFloatDataToFile(std::string name, int bWidth,
+                                       bool append);
+
 	//! set all cells to zero
 	PYTHON() void clear();
 	
 	//! all kinds of access functions, use grid(), grid[] or grid.get()
 	//! access data
-	PYTHON() T getDataKDS(int idx) const                    { DEBUG_ONLY(checkIndex(idx)); return mData[idx]; }
+	PYTHON() T getDataKDS(int idx) const { DEBUG_ONLY(checkIndex(idx)); return mData[idx]; }
+    PYTHON() T getData(int i, int j, int k) const { int idx = index(i, j, k); checkIndex(idx); return mData[idx]; }
 
 	//! access data
 	inline T get(int i,int j, int k) const         { return mData[index(i,j,k)]; }
@@ -352,6 +357,8 @@ public:
       mData[idx] = TypeObstacle;
     }
 
+    PYTHON() void loadGeomFromVboxFile(std::string filename);
+
 	//! check for different flag types
 	inline bool isObstacle(int idx) const { return get(idx) & TypeObstacle; }
 	inline bool isObstacle(int i, int j, int k) const { return get(i,j,k) & TypeObstacle; }
@@ -363,6 +370,9 @@ public:
 	inline bool isFluid(const Vec3& pos) const { return getAt(pos) & TypeFluid; }
 	inline bool isInflow(int idx) const { return get(idx) & TypeInflow; }
 	inline bool isInflow(int i, int j, int k) const { return get(i,j,k) & TypeInflow; }
+    inline void setInflow(int i, int j, int k) { setData(i, j, k, TypeInflow); }
+    inline void setStick(int i, int j, int k) { setData(i, j, k, TypeStick); }
+    inline void setOutflow(int i, int j, int k) { setData(i, j, k, TypeOutflow); } 
 	inline bool isInflow(const Vec3i& pos) const { return get(pos) & TypeInflow; }
 	inline bool isInflow(const Vec3& pos) const { return getAt(pos) & TypeInflow; }
 	inline bool isEmpty(int idx) const { return get(idx) & TypeEmpty; }

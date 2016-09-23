@@ -18,6 +18,8 @@
 #include <sstream>
 #include <cstring>
 #include "fileio.h"
+#include <fstream>
+#include <iostream>
 
 using namespace std;
 namespace Manta {
@@ -116,6 +118,85 @@ void Grid<T>::save(string name) {
 		writeGridTxt(name, this);
 	else
 		errMsg("file '" + name +"' filetype not supported");
+}
+
+template<>
+void Grid<Real>::writeFloatDataToFile(string name, int bWidth, bool append) {
+  std::ofstream file(name.c_str(),
+      append ? (std::ios::out | std::ios::binary | std::ios::app) :
+               (std::ios::out | std::ios::binary));
+  // We have to iterate through the array unfortunately because we might want
+  // to remove the border.
+  const int zdim = getSizeZ();
+  const int ydim = getSizeY();
+  const int xdim = getSizeX();
+  // 3D only for now.
+  if (xdim <= bWidth || ydim <= bWidth || zdim <= bWidth) {
+    errMsg("bad bWidth value");
+  }
+  for (int z = bWidth; z < zdim - bWidth; z++) {
+    for (int y = bWidth; y < ydim - bWidth; y++) {
+      for (int x = bWidth; x < xdim - bWidth; x++) {
+        const int idx = index(x, y, z);
+        float val = static_cast<float>(mData[idx]);
+        file.write((const char*)&val, sizeof(val));
+      }
+    }
+  }
+}
+
+template<>
+void Grid<Vec3>::writeFloatDataToFile(string name, int bWidth, bool append) {
+  std::ofstream file(name.c_str(),
+      append ? (std::ios::out | std::ios::binary | std::ios::app) :
+               (std::ios::out | std::ios::binary));
+  // We have to iterate through the array unfortunately because we might want
+  // to remove the border.
+  const int zdim = getSizeZ();
+  const int ydim = getSizeY();
+  const int xdim = getSizeX();
+  // 3D only for now.
+  if (xdim <= bWidth || ydim <= bWidth || zdim <= bWidth) {
+    errMsg("bad bWidth value");
+  }
+  for (int z = bWidth; z < zdim - bWidth; z++) {
+    for (int y = bWidth; y < ydim - bWidth; y++) {
+      for (int x = bWidth; x < xdim - bWidth; x++) {
+        const int idx = index(x, y, z);
+        float val = static_cast<float>(mData[idx].x);
+        file.write((const char*)&val, sizeof(val));
+        val = static_cast<float>(mData[idx].y);
+        file.write((const char*)&val, sizeof(val));
+        val = static_cast<float>(mData[idx].z);
+        file.write((const char*)&val, sizeof(val));
+      }
+    }
+  }
+}
+
+template<>
+void Grid<int>::writeFloatDataToFile(string name, int bWidth, bool append) {
+  std::ofstream file(name.c_str(),
+      append ? (std::ios::out | std::ios::binary | std::ios::app) :
+               (std::ios::out | std::ios::binary));
+  // We have to iterate through the array unfortunately because we might want
+  // to remove the border.
+  const int zdim = getSizeZ();
+  const int ydim = getSizeY();
+  const int xdim = getSizeX();
+  // 3D only for now.
+  if (xdim <= bWidth || ydim <= bWidth || zdim <= bWidth) {
+    errMsg("bad bWidth value");
+  }
+  for (int z = bWidth; z < zdim - bWidth; z++) {
+    for (int y = bWidth; y < ydim - bWidth; y++) {
+      for (int x = bWidth; x < xdim - bWidth; x++) {
+        const int idx = index(x, y, z);
+        float val = static_cast<float>(mData[idx]);
+        file.write((const char*)&val, sizeof(val));
+      }
+    }
+  }
 }
 
 //******************************************************************************
@@ -585,6 +666,64 @@ void FlagGrid::initDomain( const int &boundaryWidth
 		mData[idx] = TypeEmpty;
 		initBoundaries(boundaryWidth, types);
 	
+}
+
+// Return the nearest neighbor scaled coordinate.
+int32_t getScaledIndex(const int32_t isrc, const int32_t dim_src,
+                       const int32_t dim_dst) {
+  const float frac = (static_cast<float>(isrc) /
+      static_cast<float>(dim_src));
+  int32_t idst = static_cast<int32_t>(frac * static_cast<float>(dim_dst));
+  return std::min<int32_t>(std::max<int32_t>(idst, 0), dim_dst - 1);
+}
+
+void FlagGrid::loadGeomFromVboxFile(std::string file) {
+  printf("Loading geom from file %s\n", file.c_str());
+  std::ifstream input(file.c_str(), std::ios::in | std::ios::binary);
+  if (!input.is_open()) {
+    errMsg("Geom vbox file not found.");
+    return;
+  }
+  int32_t resx, resy, resz, nframes;
+  input.read((char*)&resx, sizeof(resx));
+  input.read((char*)&resy, sizeof(resy));
+  input.read((char*)&resz, sizeof(resz));
+  input.read((char*)&nframes, sizeof(nframes));
+  printf("  -> res = %d, %d, %d. %d frame(s).\n", resx, resy, resz, nframes);
+
+  if (nframes != 1) {
+    errMsg("incorrect number of frames in geometry file.")
+    return;
+  }
+
+  // First load in the data at the original resolution.
+  // std::unique_ptr<float[]> geom(new float[resx * resy * resz]);
+  // no c++ 11 :-(
+  float* geom = new float[resx * resy * resz];
+  input.read((char*)&geom[0], sizeof(geom[0]) * resx * resy * resz);
+
+  // Now copy the flags over by nearest neighbor lookup.
+  const int32_t flagsx = getSizeX();
+  const int32_t flagsy = getSizeY();
+  const int32_t flagsz = getSizeZ();
+
+  for (int32_t z = 0; z < flagsz; z++) {
+    const int32_t zgeom = getScaledIndex(z, flagsz, resz);
+    for (int32_t y = 0; y < flagsy; y++) {
+      const int32_t ygeom = getScaledIndex(y, flagsy, resy);
+      for (int32_t x = 0; x < flagsx; x++) {
+        const int32_t xgeom = getScaledIndex(x, flagsx, resx);
+        const float val = geom[zgeom * resy * resx + ygeom * resx + xgeom];
+        if (fabsf(val) < 1e-6) {
+          // Empty region, nothing to do.
+        } else {
+          setObstacle(x, y, z);
+        }
+      }
+    }
+  }
+
+  delete[] geom;
 }
 
 void FlagGrid::initBoundaries(const int &boundaryWidth, const int *types) {
