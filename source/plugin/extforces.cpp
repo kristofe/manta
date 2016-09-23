@@ -114,6 +114,55 @@ PYTHON() void setOpenBound(FlagGrid& flags, int bWidth, string openBound = "", i
 	}
 }
 
+// This function is supposed to match the tfluids.createPlumeBCs in
+// CNNFluids/torch/lib/simulate.lua
+PYTHON() void setPlumeBound(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int bWidth, Real radius, Real scale) {
+  const int xdim = flags.getSizeX() - 2 * bWidth;
+  const int ydim = flags.getSizeY();
+  const int zdim = flags.getSizeZ() - 2 * bWidth;
+
+  if (ydim < 4) {
+    printf("WARNING: ydim is not large enough!\n");
+    return;
+  }
+
+  const int centerX = xdim / 2;
+  const int centerZ = zdim / 2;
+  const int plumeRad = static_cast<int>(xdim * radius);
+  for (int z = 1; z <= zdim; z++) {
+    for (int y = 1; y <= 4; y++) {
+      for (int x = 1; x <= xdim; x++) {
+        const int dx = centerX - x;
+        const int dz = centerZ - z;
+        // Recall: lua indices are 1 indexed so you'll see lots of '- 1'.
+        const int xarr = x - 1 + bWidth;
+        const int yarr = y - 1 + bWidth;
+        const int zarr = z - 1 + bWidth;
+        Vec3i pos(xarr, yarr, zarr);
+        if ((dx * dx + dz * dz) <= plumeRad * plumeRad) {
+          if (y < 4) {
+            // In the plume. Set the BCs.
+            flags.setInflow(xarr, yarr, zarr);
+            density(xarr, yarr, zarr) = scale;
+            Vec3 velPlume(0, 1, 0);
+            vel.setDataKDS(pos, velPlume);
+          } else {
+            // Leave a 1 pixel air space to prevent velocity curling back down
+          }
+        } else {
+          // Outside the plume. Explicitly set the velocity to zero and
+          // leave the density alone.
+          // TODO(tompson): we'll not do this in manta (it looks terrible).
+          // flags.setInflow(xarr, yarr, zarr);
+          //Vec3 velPlume(0, 0, 0);
+          //vel.setDataKDS(pos, velPlume);
+          flags.setOutflow(xarr, yarr, zarr);
+        }
+      }
+    }
+  }
+}
+
 //! delete fluid and ensure empty flag in outflow cells, delete particles and density and set phi to 0.5
 PYTHON() void resetOutflow(FlagGrid& flags, Grid<Real>* phi = 0, BasicParticleSystem* parts = 0, Grid<Real>* real = 0, Grid<int>* index = 0, ParticleIndexSystem* indexSys = 0){
 	// check if phi and parts -> pindex and gpi already created -> access particles from cell index, avoid extra looping over particles
