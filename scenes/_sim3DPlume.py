@@ -73,7 +73,10 @@ assert(bWidth == 1)  # Must match training data.
 setOpenBound(flags, bWidth, "xXyYzZ", FlagOutflow | FlagFluid)
 plumeRad = 0.15  # Should match rad in fluid_net_3d_sim.
 plumeScale = 1
-setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale)
+plumeUp = True
+plumeFace = 'y'
+setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+              plumeFace)
 
 if args.loadVoxelModel == "none":
   outDir = "../../blender/mushroom_cloud_render/"
@@ -119,7 +122,8 @@ for t in range(args.numFrames):
   # still not 100% positive how mantaflow BCs work, but there's no such thing
   # as a constant density inflow unit (inflow just sets constant velocity).
   setWallBcs(flags=flags, vel=vel)
-  setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale)
+  setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+                plumeFace)
   # Torch buoyancy strength is defined as: density * dt * 0.5470 (no dx term).
   # -> it does not scale by grid size (i.e. we assume a larger grid occupies
   # more space).
@@ -154,7 +158,8 @@ for t in range(args.numFrames):
  
   # Important, must come AFTER write to file.
   setWallBcs(flags=flags, vel=vel)
-  setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale)
+  setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+                plumeFace)
 
   sm.step()
 
