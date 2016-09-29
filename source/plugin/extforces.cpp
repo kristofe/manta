@@ -114,6 +114,170 @@ PYTHON() void setOpenBound(FlagGrid& flags, int bWidth, string openBound = "", i
 	}
 }
 
+// This function is supposed to match the tfluids.createPlumeBCs in
+// CNNFluids/torch/lib/simulate.lua
+void setPlumeBoundYFace(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int bWidth, Real radius, Real scale, bool bottom_face) {
+  const int xdim = flags.getSizeX() - 2 * bWidth;
+  const int ydim = flags.getSizeY();
+  const int zdim = flags.getSizeZ() > 1 ? flags.getSizeZ() - 2 * bWidth : 1;
+
+  if (ydim < 4) {
+    printf("WARNING: ydim is not large enough!\n");
+    return;
+  }
+
+  const int ystart = bottom_face ? 1 : (ydim - 1 - 4);
+  const int yend = bottom_face ? 4 : (ydim - 1 - 1);
+  const float yvel = bottom_face ? 1 : -1;
+
+  const int centerX = xdim / 2;
+  const int centerZ = zdim / 2;
+  const int plumeRad = static_cast<int>(ydim * radius);
+  for (int z = 1; z <= zdim; z++) {
+    for (int y = ystart; y <= yend; y++) {
+      for (int x = 1; x <= xdim; x++) {
+        const int dx = centerX - x;
+        const int dz = centerZ - z;
+        // Recall: lua indices are 1 indexed so you'll see lots of '- 1'.
+        const int xarr = x - 1 + bWidth;
+        const int yarr = y - 1 + bWidth;
+        const int zarr = z - 1 + bWidth;
+        Vec3i pos(xarr, yarr, zarr);
+        if ((dx * dx + dz * dz) <= plumeRad * plumeRad) {
+          if ((bottom_face && y < yend) || (!bottom_face && y > ystart)) {
+            // In the plume. Set the BCs.
+            flags.setInflow(xarr, yarr, zarr);
+            density(xarr, yarr, zarr) = scale;
+            Vec3 velPlume(0, yvel, 0);
+            vel.setDataKDS(pos, velPlume);
+          } else {
+            // Leave a 1 pixel air space to prevent velocity curling back down
+          }
+        } else {
+          // Outside the plume. Explicitly set the velocity to zero and
+          // leave the density alone.
+          // TODO(tompson): we'll not do this in manta (it looks terrible).
+          flags.setOutflow(xarr, yarr, zarr);
+        }
+      }
+    }
+  }
+}
+
+void setPlumeBoundXFace(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int bWidth, Real radius, Real scale, bool bottom_face) {
+  const int xdim = flags.getSizeX();
+  const int ydim = flags.getSizeY() - 2 * bWidth;
+  const int zdim = flags.getSizeZ() > 1 ? flags.getSizeZ() - 2 * bWidth : 1;
+
+  if (xdim < 4) {
+    printf("WARNING: xdim is not large enough!\n");
+    return;
+  }
+
+  const int xstart = bottom_face ? 1 : (xdim - 1 - 4);
+  const int xend = bottom_face ? 4 : (xdim - 1 - 1);
+  const float xvel = bottom_face ? 1 : -1;
+
+  const int centerY = ydim / 2;
+  const int centerZ = zdim / 2;
+  const int plumeRad = static_cast<int>(xdim * radius);
+  for (int z = 1; z <= zdim; z++) {
+    for (int y = 1; y <= ydim; y++) {
+      for (int x = xstart; x <= xend; x++) {
+        const int dy = centerY - y;
+        const int dz = centerZ - z;
+        // Recall: lua indices are 1 indexed so you'll see lots of '- 1'.
+        const int xarr = x - 1 + bWidth;
+        const int yarr = y - 1 + bWidth;
+        const int zarr = z - 1 + bWidth;
+        Vec3i pos(xarr, yarr, zarr);
+        if ((dy * dy + dz * dz) <= plumeRad * plumeRad) {
+          if ((bottom_face && x < xend) || (!bottom_face && x > xstart)) {
+            // In the plume. Set the BCs.
+            flags.setInflow(xarr, yarr, zarr);
+            density(xarr, yarr, zarr) = scale;
+            Vec3 velPlume(xvel, 0, 0);
+            vel.setDataKDS(pos, velPlume);
+          } else {
+            // Leave a 1 pixel air space to prevent velocity curling back down
+          }
+        } else {
+          // Outside the plume. Explicitly set the velocity to zero and
+          // leave the density alone.
+          // TODO(tompson): we'll not do this in manta (it looks terrible).
+          flags.setOutflow(xarr, yarr, zarr);
+        }
+      }
+    }
+  }
+}
+
+void setPlumeBoundZFace(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int bWidth, Real radius, Real scale, bool bottom_face) {
+  const int xdim = flags.getSizeX() - 2 * bWidth;
+  const int ydim = flags.getSizeY() - 2 * bWidth;
+  const int zdim = flags.getSizeZ();
+
+  if (zdim < 4) {
+    printf("WARNING: zdim is not large enough!\n");
+    return;
+  }
+
+  const int zstart = bottom_face ? 1 : (zdim - 1 - 4);
+  const int zend = bottom_face ? 4 : (zdim - 1 - 1);
+  const float zvel = bottom_face ? 1 : -1;
+
+  const int centerX = xdim / 2;
+  const int centerY = ydim / 2;
+  const int plumeRad = static_cast<int>(zdim * radius);
+  for (int z = zstart; z <= zend; z++) {
+    for (int y = 1; y <= ydim; y++) {
+      for (int x = 1; x <= xdim; x++) {
+        const int dx = centerX - x;
+        const int dy = centerY - y;
+        // Recall: lua indices are 1 indexed so you'll see lots of '- 1'.
+        const int xarr = x - 1 + bWidth;
+        const int yarr = y - 1 + bWidth;
+        const int zarr = z - 1 + bWidth;
+        Vec3i pos(xarr, yarr, zarr);
+        if ((dx * dx + dy * dy) <= plumeRad * plumeRad) {
+          if ((bottom_face && z < zend) || (!bottom_face && z > zstart)) {
+            // In the plume. Set the BCs.
+            flags.setInflow(xarr, yarr, zarr);
+            density(xarr, yarr, zarr) = scale;
+            Vec3 velPlume(0, 0, zvel);
+            vel.setDataKDS(pos, velPlume);
+          } else {
+            // Leave a 1 pixel air space to prevent velocity curling back down
+          }
+        } else {
+          // Outside the plume. Explicitly set the velocity to zero and
+          // leave the density alone.
+          // TODO(tompson): we'll not do this in manta (it looks terrible).
+          flags.setOutflow(xarr, yarr, zarr);
+        }
+      }
+    }
+  }
+}
+
+
+PYTHON() void setPlumeBound(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int bWidth, Real radius, Real scale, bool bottom_face, string face) {
+  if (face == "x") {
+    setPlumeBoundXFace(flags, density, vel, bWidth, radius, scale, bottom_face);
+  } else if (face == "y") {
+    setPlumeBoundYFace(flags, density, vel, bWidth, radius, scale, bottom_face);
+  } else if (face == "z") {
+    if (vel.getSizeZ() == 2) {
+      errMsg("z face plume not supported in 2D");
+      return;
+    }
+    setPlumeBoundZFace(flags, density, vel, bWidth, radius, scale, bottom_face);
+  } else {
+    printf("ERROR: face must be 'x', 'y' or 'z' (3D only)\n");
+    return;
+  }
+}
+
 //! delete fluid and ensure empty flag in outflow cells, delete particles and density and set phi to 0.5
 PYTHON() void resetOutflow(FlagGrid& flags, Grid<Real>* phi = 0, BasicParticleSystem* parts = 0, Grid<Real>* real = 0, Grid<int>* index = 0, ParticleIndexSystem* indexSys = 0){
 	// check if phi and parts -> pindex and gpi already created -> access particles from cell index, avoid extra looping over particles

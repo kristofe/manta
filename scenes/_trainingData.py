@@ -3,7 +3,7 @@
 #
 #    manta ../scenes/_trainingData.py --help
 #
-#    manta ../scenes/_trainingData.py --dim 3 --addGeometryType "model"
+#    manta ../scenes/_trainingData.py --dim 3
 
 import argparse
 import gc
@@ -22,8 +22,10 @@ ap.add_argument("--numFrames", type=int, default=256)
 ap.add_argument("--numTraining", type=int, default=80)
 ap.add_argument("--numTest", type=int, default=80)
 ap.add_argument("--frameStride", type=int, default=4)
-ap.add_argument("--timeStep", type=float, default=0.033333)
-ap.add_argument("--addGeometryType", type=str, default="model")  #"model|sphere|none"
+ap.add_argument("--timeStep", type=float, default=0.1)
+ap.add_argument("--addModelGeometry", type=bool, default=True)
+ap.add_argument("--addSphereGeometry", type=bool, default=True)
+ap.add_argument("--addPlumeEmitters", type=bool, default=False)  # Broken!
 ap.add_argument("--addNoise", type=bool, default=True)
 ap.add_argument("--voxelPath", type=str, default="../../voxelizer/")
 ap.add_argument("--voxelNameRegex", type=str, default=".*_(16|32)\.binvox")
@@ -46,9 +48,10 @@ print("\n")
 
 # solver params
 if (args.dim == 3):
-  res = 64 + 2 * bWidth
+  baseRes = 64
 else:
-  res = 128 + 2 * bWidth
+  baseRes = 128
+res = baseRes + 2 * bWidth
 gs = vec3(res, res, res)
 if (args.dim == 2):
   gs.z = 1
@@ -69,17 +72,20 @@ else:
   datasetName = "output_current"
   layoutBoxSize = [args.voxelLayoutBoxSize, args.voxelLayoutBoxSize]
 
-if args.addGeometryType == "model":
-  datasetName = datasetName + "_geom"
-elif args.addGeometryType == "spheres":
-  datasetName = datasetName + "_spheres"
-elif args.addGeometryType != "none":
-  raise Exception("BadParams", "addGeometryType is not model, geom or none")
+if args.addModelGeometry:
+  datasetName = datasetName + "_model"
+
+if args.addSphereGeometry:
+  datasetName = datasetName + "_sphere"
+
+if args.addPlumeEmitters:
+  datasetName = datasetName + "_plume"
+
 print("Outputting dataset '%s'" % (datasetName))
 
 modelList = []
 
-if (args.addGeometryType == "model"):
+if args.addModelGeometry:
   print("using " + args.voxelPath + " for voxel data with pattern "
       + args.voxelNameRegex)
   modelListTrain = VoxelUtils.create_voxel_file_list(
@@ -91,6 +97,7 @@ flags    = sm.create(FlagGrid)
 vel      = sm.create(MACGrid)
 velTmp   = sm.create(VecGrid)  # Internally a Grid<Vec3>
 pressure = sm.create(RealGrid)
+density  = sm.create(RealGrid)
 # energy   = sm.create(RealGrid)
 
 timings = Timings()
@@ -113,6 +120,7 @@ for simnum in range(numSims):
   vel.clear()
   velTmp.clear()
   pressure.clear()
+  density.clear()
   # energy.clear()
 
   flags.initDomain(boundaryWidth=bWidth)
@@ -124,7 +132,41 @@ for simnum in range(numSims):
       openBoundStr = "xXyYzZ"
     setOpenBound(flags, bWidth, openBoundStr, FlagOutflow | FlagFluid)
 
-  if args.addGeometryType == "model":
+  # 25% of the time add a plume boundary condition (3D ONLY!).
+  addPlume = False
+  if args.addPlumeEmitters:
+     if random.uniform(0, 1) > 0.75 or simnum == 0:
+       addPlume = True
+     if addPlume:
+       # Pick a random plume face, radius, direction and scale.
+       x = random.uniform(0, 1)
+       if args.dim == 3:
+         if x > 0.666:
+           plumeFace = 'x'
+         elif x > 0.333:
+           plumeFace = 'y'
+         else:
+           plumeFace = 'z'
+       else:
+         if x > 0.5:
+           plumeFace = 'x'
+         else:
+           plumeFace = 'y'
+       plumeScale = 10 ** random.uniform(-0.3, 0.6)  # Uniform in log space
+       plumeRad = random.uniform(0.1, 0.2)
+       if random.uniform(0, 1) > 0.5:
+         plumeUp = True
+       else:
+         plumeUp = False
+
+  # TODO(tompson): Sometimes add buoyancy.
+ 
+  if addPlume:
+    setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+                  plumeFace)
+    # TODO(tompson): There might be plume INSIDE geometry! This is OK for now.
+
+  if args.addModelGeometry:
     if(args.dim == 3):
       inputDims = [res, res, res]
       geom = binvox_rw.Voxels(np.zeros(inputDims), inputDims, [0, 0, 0],
@@ -157,13 +199,23 @@ for simnum in range(numSims):
               flags.setObstacle(i, j, 0)
 
 
-  elif args.addGeometryType == "sphere":
+  if args.addSphereGeometry:
     spheres = []
-    numSpheres = int(random.uniform(8, 20))
+    if args.dim == 2:
+      if args.addModelGeometry:
+        numSpheres = int(random.uniform(4, 8))
+      else:
+        numSpheres = int(random.uniform(8, 16))
+    else:
+      if args.addModelGeometry:
+        # curse of dimensionality means you need more spheres in 3D.
+        numSpheres = int(random.uniform(8, 16))
+      else:
+        numSpheres = int(random.uniform(16, 32))
     for sid in range(0, numSpheres):
-      center = gs * vec3(random.uniform(0, 1), random.uniform(0, 1),
-                         random.uniform(0, 1))
-      radius = res * random.uniform(0.02, 0.06)
+      center = gs * vec3(random.uniform(0.1, 0.9), random.uniform(0.1, 0.9),
+                         random.uniform(0.1, 0.9))
+      radius = res * (10 ** random.uniform(-1.39, -0.9))
       sphere = sm.create(Sphere, center=center, radius=radius)
       spheres.append(sphere)
       sphere.applyToGrid(grid=flags, value=FlagObstacle)
@@ -179,15 +231,22 @@ for simnum in range(numSims):
     noise.clamp = True
     noise.clampNeg = 0
     noise.clampPos = 2
-    noise.valScale = .25
+    noise.valScale = .25 * (10 ** random.uniform(-0.5, 0.5))
     noise.valOffset = 0.075
     noise.timeAnim = 0.0
 
   # Random emitters.
   emitters = []
-  numEmitters = int(random.uniform(1, 6))
+  if args.dim == 2:
+    numEmitters = int(random.uniform(1, 6))
+  else:
+    # Again curse of dimensionality means we probably need more emitters.
+    numEmitters = int(random.uniform(3, 10))
   for e in range(0, numEmitters):
-    emitters.append(createRandomForceEmitter(args.dim, emBorder, res))
+    eRad = random.randint(1, 3)
+    eVel = 10 ** random.uniform(-0.3, 0.8)  # roughly [0.5, 6]
+    emitters.append(createRandomForceEmitter(args.dim, emBorder, res, eVel,
+                                             eRad))
 
   for t in range(args.numFrames):
     if curFrame % 16 == 0:
@@ -218,16 +277,27 @@ for simnum in range(numSims):
         getMACFromVec3(target=vel, source=velTmp)
 
       setWallBcs(flags=flags, vel=vel)
+      if addPlume:
+        setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale,
+                      plumeUp, plumeFace)
       residue = solvePressure(flags=flags, vel=vel, pressure=pressure,
                               cgMaxIterFac=cgMaxIterFac,
                               cgAccuracy=cgAccuracy, precondition=precondition)
       if residue > cgAccuracy * 10 or math.isnan(residue):
         print("ERROR: Residue (%f) has blown up" % (residue))
       setWallBcs(flags=flags, vel=vel)
+      if addPlume:
+        setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale,
+                      plumeUp, plumeFace)
 
+    # We don't have to advect density, but it helps debug the plume.
+    advectSemiLagrange(flags=flags, vel=vel, grid=density, order=2)
     advectSemiLagrange(flags=flags, vel=vel, grid=vel, order=2,
                        openBounds=True, boundaryWidth=bWidth)
-    setWallBcs(flags=flags, vel=vel)    
+    setWallBcs(flags=flags, vel=vel)
+    if addPlume:
+      setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+                    plumeFace)
 
     # You have to compute the energy explicitly. It is usually used for
     # adding turbulence.
@@ -236,8 +306,18 @@ for simnum in range(numSims):
     for em in emitters:
       em.update(sm.timestep, sm.timestep * t)
       em.addVelocities(vel, flags, bWidth)
+
     setWallBcs(flags=flags, vel=vel)
-   
+    if addPlume:
+      setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+                    plumeFace)  
+
+    #addBuoyancy(density=density, vel=vel, gravity=vec3(0,-1e-3,0), flags=flags)
+    # if random.random() > 0.5:
+    #   # With prob 0.5 add in vorticity confinement (we want the network to see
+    #   # with and without it).
+    #   vorticityConfinement(vel=vel, flags=flags, strength=0.3)
+
     if t % args.frameStride == 0:
       filename = "%06d_divergent.bin" % t
       fullFilename = directory + "/" + filename 
@@ -277,6 +357,9 @@ for simnum in range(numSims):
    
     # Important, must come AFTER write to file.
     setWallBcs(flags=flags, vel=vel)
+    if addPlume:
+      setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+                    plumeFace)
  
     sm.step()
     
