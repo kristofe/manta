@@ -379,12 +379,11 @@ class ForceEmitter:
   def setDuration(self, value):
     self.duration_ = value
 
-def createRandomForceEmitter(dim, emBorder, res, velocity, radius):
+def createRandomForceEmitter(dim, emBorder, res, velocity, radius, duration):
   curvature = math.pow(10, random.uniform(-1, 1))  # Linear in logspace.
   curvatureTScale = math.pow(10, random.uniform(-1, 1))  # Linear in logspace.
   force = 0.5  # Scales the velocity of the emitter before injecting it.
   density = 1
-  duration = random.uniform(0.1, 4)
   variance = random.uniform(0, 2)
   em = ForceEmitter(radius, velocity, force, density, duration,
                     variance, dim == 3, res, res, res, curvature,

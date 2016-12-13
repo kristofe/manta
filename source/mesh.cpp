@@ -21,6 +21,7 @@
 #include "shapes.h"
 #include "noisefield.h"
 #include <stack>
+#include <stdint.h>
 
 using namespace std;
 namespace Manta {

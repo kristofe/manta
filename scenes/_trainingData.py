@@ -23,8 +23,8 @@ ap.add_argument("--numTraining", type=int, default=80)
 ap.add_argument("--numTest", type=int, default=80)
 ap.add_argument("--frameStride", type=int, default=4)
 ap.add_argument("--timeStep", type=float, default=0.1)
-ap.add_argument("--addModelGeometry", type=bool, default=True)
-ap.add_argument("--addSphereGeometry", type=bool, default=True)
+ap.add_argument("--addModelGeometry", type=bool, default=False)
+ap.add_argument("--addSphereGeometry", type=bool, default=False)
 ap.add_argument("--addPlumeEmitters", type=bool, default=False)  # Broken!
 ap.add_argument("--addNoise", type=bool, default=True)
 ap.add_argument("--voxelPath", type=str, default="../../voxelizer/")
@@ -238,15 +238,16 @@ for simnum in range(numSims):
   # Random emitters.
   emitters = []
   if args.dim == 2:
-    numEmitters = int(random.uniform(1, 6))
+    numEmitters = int(random.uniform(4, 10))
   else:
     # Again curse of dimensionality means we probably need more emitters.
-    numEmitters = int(random.uniform(3, 10))
+    numEmitters = int(random.uniform(6, 16))
   for e in range(0, numEmitters):
     eRad = random.randint(1, 3)
-    eVel = 10 ** random.uniform(-0.3, 0.8)  # roughly [0.5, 6]
+    eVel = 10 ** random.uniform(-0.3, 0.2)  # roughly [0.5, 1.6]
+    duration = 10 ** random.uniform(-0.3, 1)  # roughly [0.5, 10]
     emitters.append(createRandomForceEmitter(args.dim, emBorder, res, eVel,
-                                             eRad))
+                                             eRad, duration))
 
   for t in range(args.numFrames):
     if curFrame % 16 == 0:
