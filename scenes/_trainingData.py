@@ -241,10 +241,10 @@ for simnum in range(numSims):
     numEmitters = int(random.uniform(4, 10))
   else:
     # Again curse of dimensionality means we probably need more emitters.
-    numEmitters = int(random.uniform(6, 16))
+    numEmitters = int(random.uniform(16, 32))
   for e in range(0, numEmitters):
     eRad = random.randint(1, 3)
-    eVel = 10 ** random.uniform(-0.3, 0.2)  # roughly [0.5, 1.6]
+    eVel = 10 ** random.uniform(-0.3, 0)  # roughly [0.5, 1]
     duration = 10 ** random.uniform(-0.3, 1)  # roughly [0.5, 10]
     emitters.append(createRandomForceEmitter(args.dim, emBorder, res, eVel,
                                              eRad, duration))

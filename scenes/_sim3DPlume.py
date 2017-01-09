@@ -18,8 +18,9 @@ import struct
 ap = argparse.ArgumentParser()
 
 # Some arguments the user might want to set.
-ap.add_argument("--numFrames", type=int, default=256)
-ap.add_argument("--timeStep", type=float, default=0.4)
+ap.add_argument("--numFrames", type=int, default=1024)
+ap.add_argument("--timeStep", type=float, default=0.1)
+ap.add_argument("--outputDecimation", type=int, default=4)
 ap.add_argument("--resolution", type=int, default=128)
 ap.add_argument("--loadVoxelModel", default="none")
 
@@ -163,11 +164,11 @@ for t in range(args.numFrames):
 
   sm.step()
 
-  print("  writing fame to files %s, %s" % (densityFilename, geomFilename))
-
   # Write out the sim state.
-  density.writeFloatDataToFile(densityFilename, bWidth, True)
-  geom.writeFloatDataToFile(geomFilename, bWidth, True)
+  if t % args.outputDecimation:
+    print("  writing fame to files %s, %s" % (densityFilename, geomFilename))
+    density.writeFloatDataToFile(densityFilename, bWidth, True)
+    geom.writeFloatDataToFile(geomFilename, bWidth, True)
 
   if verbose:
     timings.display()
