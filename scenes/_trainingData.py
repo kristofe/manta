@@ -248,7 +248,7 @@ for simnum in range(numSims):
     duration = 10 ** random.uniform(-0.3, 1)  # roughly [0.5, 10]
     emitters.append(createRandomForceEmitter(args.dim, emBorder, res, eVel,
                                              eRad, duration))
-
+  residue = 0
   for t in range(args.numFrames):
     if curFrame % 16 == 0:
       print("Simulating frame %d of %d (total)" % (curFrame + 1,
@@ -286,6 +286,9 @@ for simnum in range(numSims):
                               cgAccuracy=cgAccuracy, precondition=precondition)
       if residue > cgAccuracy * 10 or math.isnan(residue):
         print("ERROR: Residue (%f) has blown up" % (residue))
+        print("--> Starting a new simulation")
+        break
+
       setWallBcs(flags=flags, vel=vel)
       if addPlume:
         setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale,
@@ -328,11 +331,6 @@ for simnum in range(numSims):
                             cgMaxIterFac=cgMaxIterFac,
                             cgAccuracy=cgAccuracy, precondition=precondition)
    
-    if t % args.frameStride == 0:
-      filename = "%06d.bin" % t
-      fullFilename = directory + "/" + filename
-      writeOutSim(fullFilename,t,vel, pressure, flags) 
-
     if residue > cgAccuracy * 10 or math.isnan(residue):
       # If we hit maxIter, than residue will be higher than our
       # specified accuracy.  This is OK, but we shouldn't let it grow too
@@ -354,8 +352,21 @@ for simnum in range(numSims):
       # and fix it so that we can include these frames.
       print("WARNING: Residue (%f) has blown up on frame %d" % (residue, t))
       print("--> Starting a new simulation")
+
+      # Remove the last recorded divergent frame.
+      if t % args.frameStride == 0:
+        filename = "%06d_divergent.bin" % t
+        fullFilename = directory + "/" + filename
+        os.remove(fullFilename) 
+
+      # Break out of frame loop (and start a new sim).
       break
    
+    if t % args.frameStride == 0:
+      filename = "%06d.bin" % t
+      fullFilename = directory + "/" + filename
+      writeOutSim(fullFilename,t,vel, pressure, flags) 
+
     # Important, must come AFTER write to file.
     setWallBcs(flags=flags, vel=vel)
     if addPlume:
