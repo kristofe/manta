@@ -15,11 +15,116 @@
 #include "grid.h"
 #include "kernel.h"
 #include <limits>
+#include <mutex>
 
 using namespace std;
 
 namespace Manta { 
 
+// *****************************************************************************
+// The following is a bunch of SUPER hacky functions just for me to understand
+// the expanded Kernel calls.
+KERNEL(bnd=1) template<class T>
+void knPrintKernelIndsBnd1(Grid<T>& grid, std::mutex& global_mutex) {
+  {
+    std::lock_guard<std::mutex> lock(global_mutex);
+    std::cout << "i, j, k = " << i << ", " << j << ", " << k << std::endl;
+  }
+}
+
+template<class GridType>
+void fnPrintKernelIndsBnd1(GridType& grid) {
+  std::mutex global_mutex;
+  typedef typename GridType::BASETYPE T;
+  knPrintKernelIndsBnd1<T>(grid, global_mutex);
+}
+
+PYTHON() void printKernelIndsBnd1(GridBase* grid) {
+  if (grid->getType() & GridBase::TypeReal) {
+    std::cout << "Grid<Real>> KERNEL(bnd=1) indices: " << std::endl;
+    fnPrintKernelIndsBnd1<Grid<Real> >(*((Grid<Real>*)grid));
+  }
+  else if (grid->getType() & GridBase::TypeMAC) {
+    std::cout << "MACGrid KERNEL(bnd=1) indices: " << std::endl;
+    fnPrintKernelIndsBnd1<MACGrid>(*((MACGrid*)grid));
+  }
+  else if (grid->getType() & GridBase::TypeVec3) {
+    std::cout << "Grid<Vec3>> KERNEL(bnd=1) indices: " << std::endl;
+    fnPrintKernelIndsBnd1<Grid<Vec3> >(*((Grid<Vec3>*)grid));
+  } else {
+   std::cout << "WARNING: printKernelIndsBnd1 type not supported."
+             << std::endl;
+  }
+}
+
+KERNEL(idx) template<class T>
+void knPrintKernelIndsIdx(Grid<T>& grid, std::mutex& global_mutex) {
+  { 
+    std::lock_guard<std::mutex> lock(global_mutex);
+    std::cout << "idx = " << idx << std::endl;
+  }
+} 
+
+template<class GridType>
+void fnPrintKernelIndsIdx(GridType& grid) {
+  std::mutex global_mutex;
+  typedef typename GridType::BASETYPE T;
+  knPrintKernelIndsIdx<T>(grid, global_mutex);
+}
+
+PYTHON() void printKernelIndsIdx(GridBase* grid) {
+  if (grid->getType() & GridBase::TypeReal) {
+    std::cout << "Grid<Real>> KERNEL(idx) indices: " << std::endl;
+    fnPrintKernelIndsIdx<Grid<Real> >(*((Grid<Real>*)grid));
+  }
+  else if (grid->getType() & GridBase::TypeMAC) {
+    std::cout << "MACGrid KERNEL(idx) indices: " << std::endl;
+    fnPrintKernelIndsIdx<MACGrid>(*((MACGrid*)grid));
+  }
+  else if (grid->getType() & GridBase::TypeVec3) {
+    std::cout << "Grid<Vec3>> KERNEL(idx) indices: " << std::endl;
+    fnPrintKernelIndsIdx<Grid<Vec3> >(*((Grid<Vec3>*)grid));
+  } else {
+   std::cout << "WARNING: printKernelIndsIdx type not supported."
+             << std::endl;
+  }
+}
+
+KERNEL() template<class T>
+void knPrintKernelInds(Grid<T>& grid, std::mutex& global_mutex) {
+  {
+    std::lock_guard<std::mutex> lock(global_mutex);
+    std::cout << "i, j, k = " << i << ", " << j << ", " << k << std::endl;
+  }
+}
+
+template<class GridType>
+void fnPrintKernelInds(GridType& grid) {
+  std::mutex global_mutex;
+  typedef typename GridType::BASETYPE T;
+  knPrintKernelInds<T>(grid, global_mutex);
+}
+
+PYTHON() void printKernelInds(GridBase* grid) {
+  if (grid->getType() & GridBase::TypeReal) {
+    std::cout << "Grid<Real>> KERNEL() indices: " << std::endl;
+    fnPrintKernelInds<Grid<Real> >(*((Grid<Real>*)grid));
+  }
+  else if (grid->getType() & GridBase::TypeMAC) {
+    std::cout << "MACGrid KERNEL() indices: " << std::endl;
+    fnPrintKernelInds<MACGrid>(*((MACGrid*)grid));
+  }
+  else if (grid->getType() & GridBase::TypeVec3) {
+    std::cout << "Grid<Vec3>> KERNEL() indices: " << std::endl;
+    fnPrintKernelInds<Grid<Vec3> >(*((Grid<Vec3>*)grid));
+  } else {
+   std::cout << "WARNING: printKernelInds type not supported."
+             << std::endl;
+  }
+}
+
+// *****************************************************************************
+// Now Manta's advection routines.
 
 //! Semi-Lagrange interpolation kernel
 KERNEL(bnd=1) template<class T> 
@@ -230,7 +335,7 @@ void fnAdvectSemiLagrange(FluidSolver* parent, FlagGrid& flags, MACGrid& vel, Gr
 	bool levelset = orig.getType() & GridBase::TypeLevelset;
 	
 	// forward step
-	GridType fwd(parent);
+	GridType fwd(parent);  // Allocate temp memory for forward step.
 	SemiLagrange<T> (flags, vel, fwd, orig, dt, levelset, orderSpace);
 	
 	if (order == 1) {

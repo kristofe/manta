@@ -11,8 +11,6 @@
  *
  ******************************************************************************/
 
-#include <assert.h>
-
 #include "noisefield.h"
 #include "randomstream.h"
 #include "grid.h"
@@ -102,9 +100,8 @@ void WaveletNoiseField::generateTile( int loadFromFile) {
 	if(loadFromFile) {
 		FILE* fp = fopen(TILENAME,"rb"); 
 		if(fp) {
-			const size_t size = fread(noise3, sizeof(Real), n3d, fp);
-            static_cast<void>(size);  // avoid unnused variable on release.
-            assert(size == static_cast<size_t>(n3d));
+			size_t ret = fread(noise3, sizeof(Real), n3d, fp); 
+            static_cast<void>(ret);
 			fclose(fp);
 			debMsg("noise tile loaded from file! " , 1);
 			mNoiseTile = noise3;

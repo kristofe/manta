@@ -336,7 +336,7 @@ class VoxelUtils():
     total = numSlots * numSlots
 
     if (printMessages):
-      print("Creating grid layout with " + str(total) + " slots")
+      print("  Creating grid layout with " + str(total) + " slots")
 
     for i in range(0, numSlots):
       for j in range(0, numSlots):
@@ -363,7 +363,7 @@ class VoxelUtils():
         VoxelUtils.blit_voxels_into_2d_target(offset, voxelSlice, target2d)
 
       if (printMessages):
-        print("%d percent done" % ((float(count)/(total)) * 100 ))
+        print("    %d percent done" % ((float(count)/(total)) * 100 ))
 
   @staticmethod
   def create_grid_layout(srcList, srcDimsList, target, printMessages=True): 
@@ -380,7 +380,7 @@ class VoxelUtils():
     total = numSlots * numSlots * numSlots
 
     if (printMessages):
-      print("Creating grid layout with " + str(total) + " slots")
+      print("  Creating grid layout with " + str(total) + " slots")
 
     tmp = np.zeros_like(target.data)
     for i in range(0, numSlots):
@@ -405,7 +405,7 @@ class VoxelUtils():
           VoxelUtils.blit_voxels_into_target(offset, tmp, target)
 
         if (printMessages):
-          print("%d percent done" % ((float(count)/(total)) * 100 ))
+          print("    %d percent done" % ((float(count)/(total)) * 100 ))
 
   @staticmethod
   def create_voxel_file_list(folderPath, expression, printMessages=True):

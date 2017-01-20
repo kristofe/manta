@@ -15,7 +15,7 @@
 #define _FILEIO_H
 
 #include <string>
-#include <vectorbase.h>
+#include "vectorbase.h"
 
 namespace Manta {
 
@@ -32,13 +32,6 @@ void writeBobjFile(const std::string& name, Mesh* mesh);
 void readObjFile(const std::string& name, Mesh* mesh, bool append);
 void readBobjFile(const std::string& name, Mesh* mesh, bool append);
 
-// TGrid should be Grid<Vec3> or MACGrid.
-template <class TGrid>
-void writeCustomFormat(const std::string& name, const int frame, 
-                               TGrid& vel, Grid<Real>& pressure, 
-                               FlagGrid& flags);
-
-
 template<class T> void writeGridRaw(const std::string& name, Grid<T>* grid);
 template<class T> void writeGridUni(const std::string& name, Grid<T>* grid);
 template<class T> void writeGridVol(const std::string& name, Grid<T>* grid);
@@ -50,6 +43,10 @@ template<class T> void readGridVol(const std::string& name, Grid<T>* grid);
 
 void writeParticlesUni(const std::string& name, BasicParticleSystem* parts );
 void readParticlesUni (const std::string& name, BasicParticleSystem* parts );
+
+void writeCustomFormat(const std::string& filename, 
+                       MACGrid& vel, Grid<Real>& pressure, Grid<Real>& density,
+                       FlagGrid& flags);
 
 template <class T> void writePdataUni(const std::string& name, ParticleDataImpl<T>* pdata );
 template <class T> void readPdataUni (const std::string& name, ParticleDataImpl<T>* pdata );

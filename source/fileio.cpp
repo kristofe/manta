@@ -27,6 +27,7 @@ extern "C" {
 #include "particle.h"
 #include  <cstring>
 #include  <stdint.h>
+#include <memory>
 
 using namespace std;
 
@@ -328,8 +329,6 @@ void pdataConvertWrite( gzFile& gzf, ParticleDataImpl<Vec3>& pdata, void* ptr, U
 	gzwrite(gzf, ptr, sizeof(Vector3D<float>) *head.dim);
 }
 
-#endif // NO_ZLIB!=1
-
 template <class T>
 void gridReadConvert(gzFile& gzf, Grid<T>& grid, void* ptr, int bytesPerElement) {
 	errMsg("unknown type, not yet supported");
@@ -411,6 +410,8 @@ static int unifyGridType(int type) {
 	return type;
 }
 
+#endif // NO_ZLIB!=1
+
 //*****************************************************************************
 // grid data
 //*****************************************************************************
@@ -452,7 +453,7 @@ void readGridRaw(const string& name, Grid<T>* grid) {
 	
 	int bytes = sizeof(T)*grid->getSizeX()*grid->getSizeY()*grid->getSizeZ();
 	int readBytes = gzread(gzf, &((*grid)[0]), bytes);
-	assertMsg(bytes==readBytes, "can't read raw file, stream length does not match"<<bytes<<" vs "<<readBytes);
+	assertMsg(bytes==readBytes, "can't read raw file, stream length does not match, "<<bytes<<" vs "<<readBytes);
 	gzclose(gzf);
 #	else
 	debMsg( "file format not supported without zlib" ,1);
@@ -553,16 +554,18 @@ void writeGridUni(const string& name, Grid<T>* grid) {
 	if (!gzf) errMsg("can't open file " << name);
 	
 	gzwrite(gzf, ID, 4);
-	void* ptr = &((*grid)[0]);
 #	if FLOATINGPOINT_PRECISION!=1
 	// always write float values, even if compiled with double precision...
 	Grid<T> temp(grid->getParent());
 	// "misuse" temp grid as storage for floating point values (we have double, so it will always fit)
 	gridConvertWrite( gzf, *grid, &(temp[0]), head);
-#	endif
+#	else
+	void* ptr = &((*grid)[0]);
 	gzwrite(gzf, &head, sizeof(UniHeader));
 	gzwrite(gzf, ptr, sizeof(T)*head.dimX*head.dimY*head.dimZ);
+#	endif
 	gzclose(gzf);
+
 #	else
 	debMsg( "file format not supported without zlib" ,1);
 #	endif
@@ -703,23 +706,10 @@ void readGridVol<Real>(const string& name, Grid<Real>* grid) {
 #	if FLOATINGPOINT_PRECISION!=1
 	errMsg("Not yet supported");
 #	else
-	fread( &((*grid)[0]), 1, sizeof(float)*header.dimX*header.dimY*header.dimZ , fp);
+	size_t ret = fread( &((*grid)[0]), 1, sizeof(float)*header.dimX*header.dimY*header.dimZ , fp);
+    static_cast<void>(ret);
 #	endif
 
-/*
-	fwrite( &header, sizeof(volHeader), 1, fp );
-
-#	if FLOATINGPOINT_PRECISION==1
-	// for float, write one big chunk
-	fwrite( &(*grid)[0], sizeof(float), grid->getSizeX()*grid->getSizeY()*grid->getSizeZ(), fp );
-#	else
-	// explicitly convert each entry to float - we might have double precision in mantaflow
-	FOR_IDX(*grid) {
-		float value = (*grid)[idx];
-		fwrite( &value, sizeof(float), 1, fp );
-	}
-#	endif
-*/
 	fclose(fp);
 };
 
@@ -844,6 +834,7 @@ void writePdataUni(const std::string& name, ParticleDataImpl<T>* pdata ) {
 	gzwrite(gzf, &(pdata->get(0)), sizeof(T)*head.dim);
 #	endif
 	gzclose(gzf);
+
 #	else
 	debMsg( "file format not supported without zlib" ,1);
 #	endif
@@ -881,107 +872,103 @@ void readPdataUni(const std::string& name, ParticleDataImpl<T>* pdata ) {
 #	endif
 }
 
-// Function to sample either a Grid<Vec3> or MACGrid (specialization).
-template <class TGrid>
-void SampleGrid(const TGrid& src, const int i, const int j, const int k,
-                Vec3* dst) {
-  *dst = src(i, j, k);
-}
-template <>
-void SampleGrid<MACGrid>(const MACGrid& src, const int i, const int j,
-                         const int k, Vec3* dst) {
-  *dst = src.getCentered(i, j, k);
-}
-
-template <class TGrid>
-void writeCustomFormat(const string& name,const int frame, TGrid& vel,
-                       Grid<Real>& pressure, FlagGrid& flags) {
-  FILE *fp = fopen(name.c_str(), "wb");
+void writeCustomFormat(const string& filename, MACGrid& vel,
+                       Grid<Real>& pressure, Grid<Real>& density,
+                       FlagGrid& flags) {
+  FILE *fp = fopen(filename.c_str(), "wb");
   if (fp == NULL){
-    printf("ERROR: Couldn't open file: %s\n", name.c_str());
+    printf("ERROR: Couldn't open file: %s\n", filename.c_str());
     exit(-1);
   }
   
   const int32_t nx = vel.getSizeX();
   const int32_t ny = vel.getSizeY();
   const int32_t nz = vel.is3D() ? vel.getSizeZ() : 1;
+  const int32_t is_3d = vel.is3D() ? 1 : 0;
   const uint32_t size =  nx * ny * nz;
   
-  float g_frame = frame;
   int32_t transpose = 0;
 
   // Write header.
-  fwrite(&transpose, sizeof(int32_t), 1, fp);
-  fwrite(&nx, sizeof(int32_t), 1, fp);
-  fwrite(&ny, sizeof(int32_t), 1, fp);
-  fwrite(&nz, sizeof(int32_t), 1, fp);
-  fwrite(&g_frame, sizeof(float), 1, fp);
-  
-  float* tmp_x = (float*)malloc(sizeof(float)*size);
-  float* tmp_y = (float*)malloc(sizeof(float)*size);
-  float* tmp_z = (float*)malloc(sizeof(float)*size);
+  fwrite(&transpose, sizeof(transpose), 1, fp);
+  fwrite(&nx, sizeof(nz), 1, fp);
+  fwrite(&ny, sizeof(ny), 1, fp);
+  fwrite(&nz, sizeof(nz), 1, fp);
+  fwrite(&is_3d, sizeof(is_3d), 1, fp);
+ 
+  // Significantly faster to write to a temporary block than it is to
+  // do nx * ny * nz fwrite calls.
+  std::unique_ptr<float[]> ux(new float[size]);
+  std::unique_ptr<float[]> uy(new float[size]);
+  std::unique_ptr<float[]> uz(new float[size]);
 
   // Write out velocities one axis at a time.
-  uint32_t idx = 0;
-  float max_vel = 0;
-  Vec3 cur_v;
+  uint64_t idx = 0;
+  // NOTE: We will purposefully miss the n + 1 size in each dimension (which
+  // is how you would normally store the x, y, and z components of a MAC
+  // grid). Note that Manta does this as well, so even if we wanted the data
+  // we can't get at it, we just have to include the border in our torch data,
+  // detect it, then only interpolate / calculate divergence within the sim
+  // domain...
   for (int k = 0; k < nz; k++) {
     for (int j = 0; j < ny; j++) {
       for (int i = 0; i < nx; i++) {
-        SampleGrid<TGrid>(vel, i, j, k, &cur_v);
-        tmp_x[idx] = static_cast<float>(cur_v.x);
-        tmp_y[idx] = static_cast<float>(cur_v.y);
-        tmp_z[idx] = static_cast<float>(cur_v.z);
-        float cur_vel = (tmp_x[idx] * tmp_x[idx] +
-                         tmp_y[idx] * tmp_y[idx] +
-                         tmp_z[idx] * tmp_z[idx]);
-        if (cur_vel > 1e-6) {
-          cur_vel = sqrtf(cur_vel);
-        }
-        max_vel = std::max<float>(cur_vel, max_vel);
+        Vec3 cur_v = vel(i, j, k);
+        ux[idx] = static_cast<float>(cur_v.x);
+        uy[idx] = static_cast<float>(cur_v.y);
+        uz[idx] = static_cast<float>(cur_v.z);
         idx++;
       }
     }
   }
-
-  //Write out velocities
-  fwrite(tmp_x, sizeof(float), size, fp);
-  fwrite(tmp_y, sizeof(float), size, fp);
-  fwrite(tmp_z, sizeof(float), size, fp);
-
-  free(tmp_x);
-  free(tmp_y);
-  free(tmp_z);
+  fwrite(ux.get(), sizeof(ux[0]), size, fp);
+  fwrite(uy.get(), sizeof(uy[0]), size, fp);
+  if (vel.is3D()) {
+    fwrite(uz.get(), sizeof(uz[0]), size, fp);
+  }
 
   // Write out pressure.
-  // so because velocities positions are now off by -1/2 dx should we
-  // shift pressures by that amount through interpolation?
-  float max_p = 0;
+  std::unique_ptr<float[]> p(new float[size]);
+  idx = 0;
   for (int k = 0; k < nz; k++) {
     for (int j = 0; j < ny; j++) {
       for (int i = 0; i < nx; i++) {
-        float p = pressure.get(i, j, k);
-        max_p = std::max<float>(max_p, fabsf(p));
-        fwrite(&p, sizeof(float), 1, fp);
+        p[idx] = pressure.get(i, j, k);
+        idx++;
       }
     }
   }
+  fwrite(p.get(), sizeof(p[0]), size, fp);
 
-  // Write out geometry
-  for (int k = 0; k < nz; k++)
-  for (int j = 0; j < ny; j++) 
-  for (int i = 0; i < nx; i++) {
-      bool obs = flags.isObstacle(i, j, k);
-      float g = obs ? 1.0f: 0.0f;
-      fwrite(&g, sizeof(float), 1, fp);
+  // Write out geometry.
+  std::unique_ptr<int[]> f(new int[size]);
+  idx = 0;
+  for (int k = 0; k < nz; k++) {
+    for (int j = 0; j < ny; j++) {
+      for (int i = 0; i < nx; i++) {
+        f[idx] = flags(i, j, k);
+        idx++;
+      }
+    }
   }
+  fwrite(f.get(), sizeof(f[0]), size, fp);
+
+  // Write out density.
+  std::unique_ptr<float[]> d(new float[size]);
+  idx = 0;
+  for (int k = 0; k < nz; k++) { 
+    for (int j = 0; j < ny; j++) { 
+      for (int i = 0; i < nx; i++) {
+        d[idx] = density(i, j, k);
+        idx++;
+      }
+    }
+  }
+  fwrite(d.get(), sizeof(d[0]), size, fp);
 
   fclose(fp);
-
-  debMsg("Wrote Custom Format " << name << " (max ||V|| = " << max_vel <<
-         ", max |p| = " << max_p << ")", 1);
 }
-  
+
 // explicit instantiation
 template void writeGridRaw<int> (const string& name, Grid<int>*  grid);
 template void writeGridRaw<Real>(const string& name, Grid<Real>* grid);
@@ -1021,11 +1008,5 @@ template<> void readGridRaw<nbVector> (const string& name, Grid<nbVector>* grid)
 template<> void readGridUni<nbVector> (const string& name, Grid<nbVector>* grid) {assertMsg(false,"Not supported right now.");};
 #endif // ENABLE_GRID_TEST_DATATYPE
 
-template void writeCustomFormat<MACGrid>(
-    const string& name, const int frame, MACGrid& vel, Grid<Real>& pressure,
-    FlagGrid& flags);
-template void writeCustomFormat<Grid<Vec3> >(
-    const string& name, const int frame, Grid<Vec3>& vel,
-    Grid<Real>& pressure, FlagGrid& flags);
 
 } //namespace

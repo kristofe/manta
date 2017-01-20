@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * MantaFlow fluid solver framework
- * Copyright 2011 Tobias Pfaff, Nils Thuerey 
+ * Copyright 2011-2016 Tobias Pfaff, Nils Thuerey 
  *
  * This program is free software, distributed under the terms of the
  * GNU General Public License (GPL) 
@@ -51,14 +51,10 @@
 	typedef float Real;
 #   define FP_REAL_MAX __FLT_MAX__
 #   define VECTOR_EPSILON (1e-6f)
-#   define _0 0.0f
-#   define _1 1.0f
 #else
 	typedef double Real;
 #   define FP_REAL_MAX __DBL_MAX__
 #   define VECTOR_EPSILON (1e-10)
-#   define _0 0.0
-#   define _1 1.0
 #endif
 
 // windos, hardcoded limits for now (e.g. MSVC compiler)
@@ -69,14 +65,14 @@
 #   else 
 #       define __FLT_MAX__ 3.402823466e+38f
 #   endif // FLT_MAX
-#endif // __FLT_MAX__
+#endif 
 #ifndef __DBL_MAX__
 #   ifdef DBL_MAX // try to use it instead
 #       define __DBL_MAX__ DBL_MAX
 #   else 
 #       define __DBL_MAX__ 1.7976931348623158e+308
 #   endif // DBL_MAX
-#endif // __DBL_MAX__
+#endif 
 
 #ifndef M_PI
 #   define M_PI 3.1415926536
@@ -523,19 +519,6 @@ typedef Vector3D<Real>  Vec3;
 
 //! 3D vector class of type int
 typedef Vector3D<int>  Vec3i;
-
-/*
-//! Python compatible
-//! convert to Real Vector
-PYTHON() Vec3Real vec3iToVec3 ( Vec3Int v ) {
-	return Vector3D<Real> ( v[0],v[1],v[2] );
-}
-
-//! convert to int Vector
-PYTHON() Vec3Int vec3ToVec3i ( Vec3Real v ) {
-	return Vec3Int ( ( int ) v[0], ( int ) v[1], ( int ) v[2] );
-}
-*/
 
 //! convert to Real Vector
 template<class T> inline Vec3 toVec3 ( T v ) {

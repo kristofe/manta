@@ -11,8 +11,6 @@
  *
  ******************************************************************************/
 
-#include <assert.h>
-
 #include "vectorbase.h"
 #include "simpleimage.h"
 
@@ -149,9 +147,8 @@ bool SimpleImage::initFromPpm (std::string filename) {
 	unsigned char *ptr = NULL;
 	ptr = &pic[(windH-1) * rowsize];
 	for (int i = windH; i > 0; i--) {
-		const size_t size = fread((void *)ptr, 1, rowsize, fp);
-        static_cast<void>(size);  // void unnused variable on release builds.
-        assert(size == static_cast<size_t>(rowsize));
+		size_t res = fread((void *)ptr, 1, rowsize, fp);
+        static_cast<void>(res);
 		ptr -= rowsize;
 	}
 
