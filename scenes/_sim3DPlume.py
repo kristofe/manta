@@ -24,10 +24,12 @@ ap.add_argument("--timeStep", type=float, default=0.1)
 ap.add_argument("--outputDecimation", type=int, default=6)
 ap.add_argument("--resolution", type=int, default=128)
 ap.add_argument("--loadVoxelModel", default="none")
-ap.add_argument("--buoyancyScale", type=float, default=0.5)
-ap.add_argument("--vorticityConfinementAmp", type=float, default=0.0)
+ap.add_argument("--buoyancyScale", type=float, default=1.0)
+ap.add_argument("--vorticityConfinementAmp", type=float, default=0.8)
 ap.add_argument("--plumeScale", type=float, default=0.25)
 ap.add_argument("--showGUI", type=bool, default=False)
+ap.add_argument("--cgAccuracy", type=float, default=1e-3)
+ap.add_argument("--cgMaxIterFac", type=float, default=30.0)
 
 # Some Arguments the user probably should not set.
 verbose = False
@@ -137,11 +139,11 @@ for t in range(args.numFrames):
   setWallBcs(flags=flags, vel=vel)
 
   residue = solvePressure(flags=flags, vel=vel, pressure=pressure, 
-                          cgMaxIterFac=utils.cgMaxIterFac,
-                          cgAccuracy=utils.cgAccuracy,
+                          cgMaxIterFac=args.cgMaxIterFac,
+                          cgAccuracy=args.cgAccuracy,
                           precondition=utils.precondition)
  
-  if residue > utils.cgAccuracy * 10 or math.isnan(residue):
+  if residue > args.cgAccuracy * 10 or math.isnan(residue):
     raise Exception("residue is too high!")
  
   # Important, must come AFTER write to file.
