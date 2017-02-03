@@ -27,6 +27,7 @@ ap.add_argument("--loadVoxelModel", default="none")
 ap.add_argument("--buoyancyScale", type=float, default=0.5)
 ap.add_argument("--vorticityConfinementAmp", type=float, default=0.0)
 ap.add_argument("--plumeScale", type=float, default=0.25)
+ap.add_argument("--showGUI", type=bool, default=False)
 
 # Some Arguments the user probably should not set.
 verbose = False
@@ -60,7 +61,7 @@ if not verbose:
 else:
   setDebugLevel(10)  # Print like crazy!
 
-if (GUI):
+if (GUI and args.showGUI):
   gui = Gui()
   gui.show(True)
 
@@ -94,7 +95,7 @@ def writeInt32(fileHandle, val):
 def writeFloat(fileHandle, val):
   fileHandle.write(struct.pack('f', val))
 
-densityFilename = outDir + "/density_output_manta.vbox"
+densityFilename = outDir + "density_output_manta.vbox"
 densityFile = open(densityFilename, "wb")
 writeInt32(densityFile, baseRes)
 writeInt32(densityFile, baseRes)
@@ -102,7 +103,7 @@ writeInt32(densityFile, baseRes)
 writeInt32(densityFile, args.numFrames)
 densityFile.close()
 
-geomFilename = outDir + "/geom_output_manta.vbox"
+geomFilename = outDir + "geom_output_manta.vbox"
 geomFile = open(geomFilename, "wb")
 writeInt32(geomFile, baseRes)
 writeInt32(geomFile, baseRes)
