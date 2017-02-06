@@ -41,6 +41,8 @@ for k, v in vars(args).items():
   print("  %s: %s" % (k, v))
 print("\n")
 
+prefix = "ts=" + str(args.timeStep) + "-res=" + str(args.resolution) + "-model=" + args.loadVoxelModel + "-bscale=" + str(args.buoyancyScale) + "-vc=" + str(args.vorticityConfinementAmp) + "-ps=" + str(args.plumeScale) + "-cga=" + str(args.cgAccuracy) + "-cgfac=" + str(args.cgMaxIterFac) + "-"
+
 baseRes = args.resolution
 res = baseRes + 2 * utils.bWidth
 gridSize = vec3(res, res, res)
@@ -97,7 +99,7 @@ def writeInt32(fileHandle, val):
 def writeFloat(fileHandle, val):
   fileHandle.write(struct.pack('f', val))
 
-densityFilename = outDir + "density_output_manta.vbox"
+densityFilename = outDir + prefix +  "density_output_manta.vbox"
 densityFile = open(densityFilename, "wb")
 writeInt32(densityFile, baseRes)
 writeInt32(densityFile, baseRes)
@@ -105,7 +107,7 @@ writeInt32(densityFile, baseRes)
 writeInt32(densityFile, args.numFrames)
 densityFile.close()
 
-geomFilename = outDir + "geom_output_manta.vbox"
+geomFilename = outDir + prefix + "geom_output_manta.vbox"
 geomFile = open(geomFilename, "wb")
 writeInt32(geomFile, baseRes)
 writeInt32(geomFile, baseRes)
