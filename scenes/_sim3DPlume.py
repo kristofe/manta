@@ -27,6 +27,8 @@ ap.add_argument("--loadVoxelModel", default="none")
 ap.add_argument("--buoyancyScale", type=float, default=0.5)
 ap.add_argument("--vorticityConfinementAmp", type=float, default=0.0)
 ap.add_argument("--plumeScale", type=float, default=0.25)
+ap.add_argument("--advectionOrder", type=int, default=2)
+ap.add_argument("--advectionOrderSpace", type=int, default=1)
 
 # Some Arguments the user probably should not set.
 verbose = False
@@ -39,7 +41,7 @@ for k, v in vars(args).items():
 print("\n")
 
 baseRes = args.resolution
-res = baseRes + 2 * utils.bWidth
+res = baseRes + 2 * utils.bWidth  # Note: bWidth is 0 by default.
 gridSize = vec3(res, res, res)
 
 random.seed(1945)
@@ -113,9 +115,12 @@ geomFile.close()
 for t in range(args.numFrames):
   print("Simulating frame %d of %d (total)" % (curFrame + 1, totalFrames))
 
-  advectSemiLagrange(flags=flags, vel=vel, grid=density, order=2)
-  advectSemiLagrange(flags=flags, vel=vel, grid=vel, order=2,
-                     openBounds=True, boundaryWidth=utils.bWidth)
+  advectSemiLagrange(flags=flags, vel=vel, grid=density,
+                     order=args.advectionOrder,
+                     orderSpace=args.advectionOrderSpace)
+  advectSemiLagrange(flags=flags, vel=vel, grid=vel, order=args.advectionOrder,
+                     openBounds=True, boundaryWidth=utils.bWidth,
+                     orderSpace=args.advectionOrderSpace)
  
   setWallBcs(flags=flags, vel=vel)
 

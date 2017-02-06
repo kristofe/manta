@@ -241,6 +241,11 @@ for simnum in range(numSims):
       residue = utils.InitSim(flags, vel, velTmp, noise, density, pressure,
                               utils.bWidth, utils.cgAccuracy,
                               utils.precondition, utils.cgMaxIterFac)
+      if math.isnan(residue):
+        # Try again but with the preconditioner off.
+        residue = utils.InitSim(flags, vel, velTmp, noise, density, pressure,
+                                utils.bWidth, utils.cgAccuracy,
+                                False, utils.cgMaxIterFac)
       if residue > utils.cgAccuracy * 10 or math.isnan(residue):
         print("WARNING: Residue (%f) has blown up before starting sim)" % \
             (residue))
@@ -279,6 +284,13 @@ for simnum in range(numSims):
                             cgAccuracy=utils.cgAccuracy,
                             precondition=utils.precondition)
    
+    if math.isnan(residue):
+      # try again but with the preconditioner off.
+      residue = solvePressure(flags=flags, vel=vel, pressure=pressure,
+                              cgMaxIterFac=utils.cgMaxIterFac,
+                              cgAccuracy=utils.cgAccuracy,
+                              precondition=False)
+
     if residue < utils.cgAccuracy * 10 or not math.isnan(residue):
       setWallBcs(flags=flags, vel=vel)  # This will be "in" the model.
 

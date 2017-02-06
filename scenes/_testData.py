@@ -21,10 +21,10 @@ ap = argparse.ArgumentParser()
 
 # Some arguments the user might want to set.
 ap.add_argument("--timeStep", type=float, default=0.1)
-ap.add_argument("--seed", type=int, default=1945)
+ap.add_argument("--seed", type=int, default=1944)
 ap.add_argument("--directory", type=str,
                 default='../../torch/tfluids/test_data')
-ap.add_argument("--nbatch", type=int, default=3)
+ap.add_argument("--nbatch", type=int, default=16)
 
 args = ap.parse_args()
 print("\nUsing arguments:")
@@ -43,8 +43,8 @@ for dim in [2, 3]:
 
     # solver params
     gridSize = vec3(16 + 2 * utils.bWidth,
-                    17 + 2 * utils.bWidth + 1,
-                    18 + 2 * utils.bWidth + 2)  # Make dims not equal.
+                    17 + 2 * utils.bWidth,
+                    9 + 2 * utils.bWidth)  # Make dims not equal.
     if (dim == 2):
       gridSize.z = 1
     
@@ -107,8 +107,15 @@ for dim in [2, 3]:
     # data is good enough to handle all cases.
 
     residue = utils.InitSim(flags, vel, velTmp, noise, density, pressure,
-                            utils.bWidth, utils.cgAccuracy, utils.precondition,
-                            utils.cgMaxIterFac)
+                            utils.bWidth, utils.cgAccuracy / 100,
+                            utils.precondition, utils.cgMaxIterFac * 100)
+
+    if math.isnan(residue):
+      # Try again but with the preconditioner off.
+      residue = utils.InitSim(flags, vel, velTmp, noise, density, pressure,
+                              utils.bWidth, utils.cgAccuracy / 100,
+                              False, utils.cgMaxIterFac * 100)
+
     # We need low residue for the test data!
     assert(residue <= utils.cgAccuracy and not math.isnan(residue))
  
@@ -152,11 +159,18 @@ for dim in [2, 3]:
     SaveData("setWallBcs2.bin", vel, pressure, density, flags)
 
     residue = solvePressure(flags=flags, vel=vel, pressure=pressure, 
-                            cgMaxIterFac=utils.cgMaxIterFac,
-                            cgAccuracy=utils.cgAccuracy,
+                            cgMaxIterFac=utils.cgMaxIterFac * 100,
+                            cgAccuracy=utils.cgAccuracy / 100,
                             precondition=utils.precondition)
+    if math.isnan(residue):
+      # Try again but with the preconditioner off.
+      residue = solvePressure(flags=flags, vel=vel, pressure=pressure,
+                              cgMaxIterFac=utils.cgMaxIterFac * 100,
+                              cgAccuracy=utils.cgAccuracy / 100,
+                              precondition=False)
+
     assert(residue <= utils.cgAccuracy and not math.isnan(residue))
-    SaveData("solvePressure.bin", vel, pressure, density, flags)
+    SaveData("solvePressure.bin", vel, pressure, rhs, flags)
 
     # Use the pressure from the solution above to correct the divergence.
     # Note: solvePressure has already called this on vel (in-place). This is why
