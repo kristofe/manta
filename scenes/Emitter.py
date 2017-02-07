@@ -6,6 +6,10 @@ except ImportError:
 
 import os, shutil, math, sys, random
 
+# TODO(tompson): This code is horrible. It started horrible and has only gotten
+# worse. The Emitter class should be rewritten at some point to be a lot
+# clearer.
+
 # Append matlabnoise path.
 sys.path.append(os.getcwd() + "/../../../matlabnoise/")
 import matlabnoise
@@ -26,7 +30,16 @@ class Vec3Utils:
   @staticmethod
   def length(v):
     return math.sqrt(Vec3Utils.lengthSquared(v))
-  
+ 
+  @staticmethod
+  def normalizeVec3(p):
+    length = math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z)
+    if length > 1e-6:
+      p.x /= length
+      p.y /= length
+      p.z /= length
+    return p
+
   @staticmethod
   #source is vec3
   def setLength(source, s):
@@ -131,34 +144,24 @@ class MathUtils:
   
   
 class ForceEmitter:
-  def __init__(self, radius, maxVelocity, maxForce, density, duration,
-               variance, is3D, xdim, ydim, zdim, curvature, curvatureTScale): 
+  def __init__(self, radius, velocity, amplitude, is3D, xdim, ydim, zdim,
+               curvature, curvatureTScale, bWidth): 
     self.is3D_ = is3D
     self.radius_ = radius
-    self.maxVelocity_ = maxVelocity
-    self.maxForce_ = maxForce
-    self.density_ = density
-    self.duration_ = duration
-    self.variance_ = variance
-    self.active_ = False
-    self.radius_ = self.addVariance(self.radius_)
-    self.duration_ = self.addVariance(self.duration_)
-    self.startTime_ = -self.duration_
+    self.amplitude_ = amplitude
     self.curvature_ = curvature
     self.curvatureTScale_ = curvatureTScale
-    self.min_ = [0, 0, 0]
     if is3D:
-      self.max_ = [xdim - 1, ydim - 1, zdim - 1]
+      self.min_ = [bWidth, bWidth, bWidth]
+      self.max_ = [xdim - 1 - bWidth, ydim - 1 - bWidth, zdim - 1 - bWidth]
     else:
-      self.max_ = [xdim - 1, ydim - 1, 0]
+      self.min_ = [bWidth, bWidth, 0]
+      self.max_ = [xdim - 1 - bWidth, ydim - 1 - bWidth, 0]
     self.updateValidBounds()  # Calculates self.validMin_ and self.validMax_
     self.source_ = Sphere3D([0.0, 0.0, 0.0], self.radius_)
     self.resetPosition()
-    self.resetForceAndVelocity()
+    self.resetVelocity(velocity)
 
-  def getForce(self):
-    return self.force_
-  
   def getIntPosition(self):
     return [int(self.source_.center[0]), int(self.source_.center[1]),
             int(self.source_.center[2])]
@@ -219,15 +222,6 @@ class ForceEmitter:
       self.validMin_[2] = 0
       self.validMax_[2] = 0
       
-  def activate(self):
-    self.active_ = True
-    
-  def deactivate(self):
-    self.active_ = False
-    
-  def isActive(self):
-    return self.active_
-  
   def update(self, dt, time):
     newPos = list(self.source_.center)
 
@@ -272,11 +266,6 @@ class ForceEmitter:
       self.velocity_ = Vec3Utils.rotateYAxis(self.velocity_,
                                              accel[2] * math.pi * 2 * dt)
     
-    if (time - self.startTime_ >=  self.duration_):
-      self.resetPosition()
-      self.resetForceAndVelocity()
-      self.startTime_ = time
-
   def resetPosition(self):
     p = [0, 0, 0]
     for i in range(3):
@@ -316,15 +305,20 @@ class ForceEmitter:
             if (self.isOutsideBounds(pp) != True and 
               pp[0] > borderWidth and pp[0] < maxX and
               pp[1] > borderWidth and pp[1] < maxY):
-              t = MathUtils.sphereForceFalloff(self.source_, samplePos) * \
-                  self.maxForce_
-              v = self.velocity_  # Force should be equal to the velocity.
-              f = vec3(t * v[0], t * v[1], t * v[2])
+              t = MathUtils.sphereForceFalloff(self.source_, samplePos)
+              # Force should be in the direction of velocity, multiplied by
+              # the amplitude.
+
+              # Force should be equal to the velocity multiplied by the
+              # amplitude
+              v = list(self.velocity_)
+              v = ForceEmitter.normalizeVec3(v)
+              f = vec3(self.amplitude_ * t * v[0],
+                       self.amplitude_ * t * v[1],
+                       self.amplitude_ * t * v[2])
               pp = vec3(int(pp[0]), int(pp[1]), int(pp[2]))
-              # FIXME:flags.isObstacleKDS(pp) doesn't seemt to work!  Maybe
-              # because it expects a vec3i and i was passing a vec3
-              if (flags.isFluidKDS(pp) and \
-                  not flags.isObstacle3KDS(int(pp.x), int(pp.y), int(pp.z))):
+              if (flags.isFluid(pp) and \
+                  not flags.isObstacle(int(pp.x), int(pp.y), int(pp.z))):
                 if (o == 0):
                   vg.addAtMACX(pp, f)
                 elif (o == 1):
@@ -340,7 +334,7 @@ class ForceEmitter:
         p[i] /= length
     return p
 
-  def resetForceAndVelocity(self):
+  def resetVelocity(self, velocity):
     # Create a unit length direction vector.
     u = MathUtils.getRand01()
     v = MathUtils.getRand01()
@@ -351,48 +345,18 @@ class ForceEmitter:
     direction = ForceEmitter.normalizeVec3(direction)
    
     self.velocity_ = list(direction)
-    self.force_ = list(direction)
 
     for i in range(3):
-      self.velocity_[i] *= self.maxVelocity_
-      self.force_[i] *= self.maxForce_
+      self.velocity_[i] *= velocity
+
     self.curvatureOffset_ = MathUtils.getRand01() * 100
 
   def getSource(self):
     return self.source_
 
-  def getDensity(self):
-    return self.density_
-
   def getFalloffFromLocation(self,location):
     return MathUtils.sphereForceFalloff(self.source_, self.location)
-
-  def getForceScalarAtLocation(self, index, location):
-    return self.force_(index) * self.getFalloffFromLocation(location)
 
   def isLocationInsideEmitter(self, location):
     return source_.isInside(location)
 
-  def addVariance(self, value):
-    return value + (MathUtils.getRand01() * self.variance_ * value)
-
-  def setDuration(self, value):
-    self.duration_ = value
-
-def createRandomForceEmitter(dim, emBorder, res, velocity, radius, duration):
-  curvature = math.pow(10, random.uniform(-1, 1))  # Linear in logspace.
-  curvatureTScale = math.pow(10, random.uniform(-1, 1))  # Linear in logspace.
-  force = 0.5  # Scales the velocity of the emitter before injecting it.
-  density = 1
-  variance = random.uniform(0, 2)
-  em = ForceEmitter(radius, velocity, force, density, duration,
-                    variance, dim == 3, res, res, res, curvature,
-                    curvatureTScale)
-  if (dim == 2):
-    em.setBounds([emBorder, emBorder, 0],
-                 [res - 1 - emBorder, res - 1 - emBorder, 0])
-  else:
-    em.setBounds([emBorder, emBorder, emBorder],
-                 [res - 1 - emBorder, res - 1 - emBorder, res - 1 - emBorder])
-  em.activate()
-  return em

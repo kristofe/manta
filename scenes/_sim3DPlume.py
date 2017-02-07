@@ -14,24 +14,25 @@ from voxel_utils import VoxelUtils
 import binvox_rw
 import numpy as np
 import struct
+import utils
 
 ap = argparse.ArgumentParser()
 
 # Some arguments the user might want to set.
-ap.add_argument("--numFrames", type=int, default=1024)
+ap.add_argument("--numFrames", type=int, default=1536)
 ap.add_argument("--timeStep", type=float, default=0.1)
-ap.add_argument("--outputDecimation", type=int, default=4)
+ap.add_argument("--outputDecimation", type=int, default=6)
 ap.add_argument("--resolution", type=int, default=128)
 ap.add_argument("--loadVoxelModel", default="none")
+ap.add_argument("--buoyancyScale", type=float, default=0.5)
+ap.add_argument("--vorticityConfinementAmp", type=float, default=0.0)
+ap.add_argument("--plumeScale", type=float, default=0.25)
+ap.add_argument("--advectionOrder", type=int, default=2)
+ap.add_argument("--advectionOrderSpace", type=int, default=1)
 
 # Some Arguments the user probably should not set.
-dim = 3
-bWidth = 1
-emBorder = 1
-cgAccuracy = 0.001
-cgMaxIterFac = 30.0
 verbose = False
-precondition = False  # For now the preconditioner causes segfaults.
+dim = 3
 
 args = ap.parse_args()
 print("\nUsing arguments:")
@@ -40,16 +41,16 @@ for k, v in vars(args).items():
 print("\n")
 
 baseRes = args.resolution
-res = baseRes + 2 * bWidth
-gs = vec3(res, res, res)
+res = baseRes + 2 * utils.bWidth  # Note: bWidth is 0 by default.
+gridSize = vec3(res, res, res)
 
 random.seed(1945)
 
-sm = Solver(name="main", gridSize=gs, dim=dim)
+sm = Solver(name="main", gridSize=gridSize, dim=dim)
 sm.timestep = args.timeStep
 
-flags    = sm.create(FlagGrid)
-vel      = sm.create(MACGrid)
+flags = sm.create(FlagGrid)
+vel = sm.create(MACGrid)
 pressure = sm.create(RealGrid)
 density = sm.create(RealGrid)
 geom = sm.create(RealGrid)
@@ -68,15 +69,13 @@ if (GUI):
 totalFrames = args.numFrames
 curFrame = 0
 
-flags.initDomain(boundaryWidth=bWidth)
-flags.fillGrid()
-assert(bWidth == 1)  # Must match training data.
-setOpenBound(flags, bWidth, "xXyYzZ", FlagOutflow | FlagFluid)
+utils.InitDomain(flags, utils.bWidth, dim)
+
 plumeRad = 0.15  # Should match rad in fluid_net_3d_sim.
-plumeScale = 1
+plumeScale = args.plumeScale
 plumeUp = True
 plumeFace = 'y'
-setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
+setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale, plumeUp,
               plumeFace)
 
 if args.loadVoxelModel == "none":
@@ -116,59 +115,51 @@ geomFile.close()
 for t in range(args.numFrames):
   print("Simulating frame %d of %d (total)" % (curFrame + 1, totalFrames))
 
-  advectSemiLagrange(flags=flags, vel=vel, grid=density, order=2)
-  advectSemiLagrange(flags=flags, vel=vel, grid=vel, order=2,
-                     openBounds=True, boundaryWidth=bWidth)
-  # Note: The plume density wont stay constant throughout the simulation. I'm
-  # still not 100% positive how mantaflow BCs work, but there's no such thing
-  # as a constant density inflow unit (inflow just sets constant velocity).
+  advectSemiLagrange(flags=flags, vel=vel, grid=density,
+                     order=args.advectionOrder,
+                     orderSpace=args.advectionOrderSpace)
+  advectSemiLagrange(flags=flags, vel=vel, grid=vel, order=args.advectionOrder,
+                     openBounds=True, boundaryWidth=utils.bWidth,
+                     orderSpace=args.advectionOrderSpace)
+ 
   setWallBcs(flags=flags, vel=vel)
-  setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
-                plumeFace)
-  # Torch buoyancy strength is defined as: density * dt * 0.5470 (no dx term).
-  # -> it does not scale by grid size (i.e. we assume a larger grid occupies
-  # more space).
-  # Manta buoyancy strength is defined as: density * gravity * dt / dx.
-  # -> so it does scale by grid size.
-  # Assume torch dt matches manta dt (0.4) and back-calculate manta strength
-  # to receive the same force.
-  bStrength = 0.5470 / (1 / sm.dx())
+
+  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
+                plumeUp, plumeFace)
+
+  bStrength = -(sm.dx() / 4) * args.buoyancyScale
   print("  Using buoyancy strength: %f" % (bStrength))
-  addBuoyancy(density=density, vel=vel, gravity=vec3(0, -bStrength, 0),
+  addBuoyancy(density=density, vel=vel, gravity=vec3(0, bStrength, 0),
               flags=flags)
 
-  # Our vorticity confinement force is multiplied by:
-  # -> f_vc * scale * dt
-  # It's not obvious what manta does, but I DON'T think they're normalizing
-  # by dt, i.e. it's just:
-  # -> f_vc * scale
-  # Assume we used 0.8 strength in torch (current default).
-  vStrength = 0.8 * 0.4 / (1 / sm.dx())
-  # Unfortunately, this should work, but it doesn't :-( We need an extra
-  # fudge factor (I suspect they don't calculate curl properly).
-  vStrength = vStrength * 10
+  vStrength = sm.dx() * args.vorticityConfinementAmp
   print("  Using vorticity confinement strength: %f" % (vStrength))
   vorticityConfinement(vel=vel, flags=flags, strength=vStrength) 
 
+  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
+                plumeUp, plumeFace)
+  setWallBcs(flags=flags, vel=vel)
+
   residue = solvePressure(flags=flags, vel=vel, pressure=pressure, 
-                          cgMaxIterFac=cgMaxIterFac,
-                          cgAccuracy=cgAccuracy, precondition=precondition)
+                          cgMaxIterFac=utils.cgMaxIterFac,
+                          cgAccuracy=utils.cgAccuracy,
+                          precondition=utils.precondition)
  
-  if residue > cgAccuracy * 10 or math.isnan(residue):
+  if residue > utils.cgAccuracy * 10 or math.isnan(residue):
     raise Exception("residue is too high!")
  
   # Important, must come AFTER write to file.
   setWallBcs(flags=flags, vel=vel)
-  setPlumeBound(flags, density, vel, bWidth, plumeRad, plumeScale, plumeUp,
-                plumeFace)
+  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
+                plumeUp, plumeFace)
 
   sm.step()
 
   # Write out the sim state.
-  if t % args.outputDecimation:
+  if (t % args.outputDecimation) == 0:
     print("  writing fame to files %s, %s" % (densityFilename, geomFilename))
-    density.writeFloatDataToFile(densityFilename, bWidth, True)
-    geom.writeFloatDataToFile(geomFilename, bWidth, True)
+    density.writeFloatDataToFile(densityFilename, utils.bWidth, True)
+    geom.writeFloatDataToFile(geomFilename, utils.bWidth, True)
 
   if verbose:
     timings.display()

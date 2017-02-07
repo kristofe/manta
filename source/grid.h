@@ -24,7 +24,6 @@ namespace Manta {
 class LevelsetGrid;
 	
 //! Base class for all grids
-
 PYTHON() class GridBase : public PbClass {
 public:
 	enum GridType { TypeNone = 0, TypeReal = 1, TypeInt = 2, TypeVec3 = 4, TypeMAC = 8, TypeLevelset = 16, TypeFlags = 32 };
@@ -40,7 +39,7 @@ public:
 	//! Get the grids dimensions
 	inline Vec3i getSize() const { return mSize; }
 
-	PYTHON() Vec3i getSizeVec3i() const { return mSize; }
+    PYTHON() Vec3i getSizeVec3i() const { return mSize; }
 	
 	//! Get Stride in X dimension
 	inline int getStrideX() const { return 1; }
@@ -100,7 +99,7 @@ public:
 	
 	PYTHON() void save(std::string name);
 	PYTHON() void load(std::string name);
-
+	
     PYTHON() void writeFloatDataToFile(std::string name, int bWidth,
                                        bool append);
 
@@ -108,10 +107,8 @@ public:
 	PYTHON() void clear();
 	
 	//! all kinds of access functions, use grid(), grid[] or grid.get()
-	//! access data
-	PYTHON() T getDataKDS(int idx) const { DEBUG_ONLY(checkIndex(idx)); return mData[idx]; }
+    //! access data
     PYTHON() T getData(int i, int j, int k) const { int idx = index(i, j, k); checkIndex(idx); return mData[idx]; }
-
 	//! access data
 	inline T get(int i,int j, int k) const         { return mData[index(i,j,k)]; }
 	//! access data
@@ -172,7 +169,9 @@ public:
 	PYTHON() void multConst(T s);
 	//! clamp content to range (for vec3, clamps each component separately)
 	PYTHON() void clamp(Real min, Real max);
-	
+    //! fill all cells with uniform(min, max) iid noise.
+    PYTHON() void random(Real min, Real max, int seed);
+
 	// common compound operators
 	//! get absolute max value in grid 
 	PYTHON() Real getMaxAbs();
@@ -229,45 +228,45 @@ public:
 	inline Vec3 getAtMACY(int i, int j, int k) const;
 	inline Vec3 getAtMACZ(int i, int j, int k) const;
 
-	PYTHON() void setAtMACX(const Vec3i& pos, const Vec3& v) {
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].x = v.x;
-	}
+    PYTHON() void setAtMACX(const Vec3i& pos, const Vec3& v) {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].x = v.x;
+    }
 
-	PYTHON() void addAtMACX(const Vec3i& pos, const Vec3& v) {
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].x += v.x;
-	}
+    PYTHON() void addAtMACX(const Vec3i& pos, const Vec3& v) {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].x += v.x;
+    }
 
-	PYTHON() void setAtMACY(const Vec3i& pos, const Vec3& v) {
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].y = v.y;
-	}
+    PYTHON() void setAtMACY(const Vec3i& pos, const Vec3& v) {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].y = v.y;
+    }
 
-	PYTHON() void addAtMACY(const Vec3i& pos, const Vec3& v) {
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].y += v.y;
-	}
+    PYTHON() void addAtMACY(const Vec3i& pos, const Vec3& v) {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].y += v.y;
+    }
 
-	PYTHON() void setAtMACZ(const Vec3i& pos, const Vec3& v) {
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].z = v.z;
-	}
+    PYTHON() void setAtMACZ(const Vec3i& pos, const Vec3& v) {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].z = v.z;
+    }
 
-	PYTHON() void addAtMACZ(const Vec3i& pos, const Vec3& v) {
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].z += v.z;
-	}
+    PYTHON() void addAtMACZ(const Vec3i& pos, const Vec3& v) {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].z += v.z;
+    }
 
 	// interpolation
 	inline Vec3 getInterpolated(const Vec3& pos) const { return interpolMAC(mData, mSize, mStrideZ, pos); }
-	PYTHON() void setInterpolatedValue(const Vec3& pos, const Vec3& val) { Vec3 tmp; return setInterpolMAC(mData, mSize, mStrideZ, pos, val, &tmp); }	
+    PYTHON() void setInterpolatedValue(const Vec3& pos, const Vec3& val) { Vec3 tmp; return setInterpolMAC(mData, mSize, mStrideZ, pos, val, &tmp); }
 	inline void setInterpolated(const Vec3& pos, const Vec3& val, Vec3* tmp) { return setInterpolMAC(mData, mSize, mStrideZ, pos, val, tmp); }
 	inline Vec3 getInterpolatedHi(const Vec3& pos, int order) const { 
 		switch(order) {
@@ -275,6 +274,19 @@ public:
 		case 2:  return interpolCubicMAC(mData, mSize, mStrideZ, pos); 
 		default: assertMsg(false, "Unknown interpolation order "<<order); }
 	}
+    PYTHON() void setDataCentered(const Vec3i& pos, const Vec3& v) 
+    {
+        Vec3i v3index = toVec3i(pos);
+        const int idx = index(v3index);
+        mData[idx].x = v.x;
+        mData[idx+1].x = v.x;
+        mData[idx].y = v.y;
+        mData[idx+mSize.x].y = v.y;
+        if( this->is3D() ) {
+            mData[idx].z = v.z;
+            mData[idx+mStrideZ].z = v.z;
+        }
+    }
 	// specials for mac grid:
 	template<int comp> inline Real getInterpolatedComponent(Vec3 pos) const { return interpolComponent<comp>(mData, mSize, mStrideZ, pos); }
 	template<int comp> inline Real getInterpolatedComponentHi(const Vec3& pos, int order) const { 
@@ -283,40 +295,7 @@ public:
 		case 2:  return interpolCubicMAC(mData, mSize, mStrideZ, pos)[comp];  // warning - not yet optimized
 		default: assertMsg(false, "Unknown interpolation order "<<order); }
 	}
-	PYTHON() void setDataKDS(const Vec3i& pos, const Vec3& v) 
-	{
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-		mData[idx].x = v.x;
-		mData[idx+1].x = v.x;
-		mData[idx].y = v.y;
-		mData[idx+mSize.x].y = v.y;
-		if( this->is3D() ) {
-			mData[idx].z = v.z;
-			mData[idx+mStrideZ].z = v.z;
-		}
-	}
-	PYTHON() void addDataKDS(const Vec3i& pos, const Vec3& v) 
-	{
-	/*
-		you're sampling at centers
-		you would need to set the dx comenent sampled at pos + (0.5, 0, 0)
-		the dy component sampled at pos + (0, 0.5, 0.5)
-		the dy component sampled at pos + (0, 0.5, 0)
-	*/
-
-		Vec3i v3index = toVec3i(pos);
-		const int idx = index(v3index);
-    //checkIndex(idx);
-		mData[idx].x += 0.5 * v.x;
-		mData[idx + 1].x += 0.5 * v.x;
-		mData[idx].y += 0.5 * v.y;
-		mData[idx + mSize.x].y += 0.5 * v.y;
-		if( this->is3D() ) {
-			mData[idx].z += 0.5 * v.z;
-			mData[idx + mStrideZ].z += 0.5 * v.z;
-		}
-	}
+	
 protected:
 };
 
@@ -343,15 +322,12 @@ public:
 		
 	//! access for particles
 	inline int getAt(const Vec3& pos) const { return mData[index((int)pos.x, (int)pos.y, (int)pos.z)]; }
-			
-	PYTHON() bool isObstacle3KDS(int i, int j, int k) const { return get(i,j,k) & TypeObstacle; }
-	PYTHON() bool isObstacleKDS(const Vec3i& pos) const { return get(pos) & TypeFluid; }
-	PYTHON() bool isFluidKDS(const Vec3i& pos) const { return get(pos) & TypeFluid; }
-	PYTHON() void setData(const int i, const int j, const int k, const int val) 
-	{
-		const int idx = index(i, j, k);
-		mData[idx] = val;
-	}
+		
+   PYTHON() void setData(const int i, const int j, const int k, const int val) 
+   {
+       const int idx = index(i, j, k);
+       mData[idx] = val;
+   }
     PYTHON() void setObstacle(const int i, const int j, const int k) {
       const int idx = index(i, j, k);
       mData[idx] = TypeObstacle;
@@ -361,20 +337,20 @@ public:
 
 	//! check for different flag types
 	inline bool isObstacle(int idx) const { return get(idx) & TypeObstacle; }
-	inline bool isObstacle(int i, int j, int k) const { return get(i,j,k) & TypeObstacle; }
-	inline bool isObstacle(const Vec3i& pos) const { return get(pos) & TypeObstacle; }
+	PYTHON() inline bool isObstacle(int i, int j, int k) const { return get(i,j,k) & TypeObstacle; }
+	PYTHON() inline bool isObstacle(const Vec3i& pos) const { return get(pos) & TypeObstacle; }
 	inline bool isObstacle(const Vec3& pos) const { return getAt(pos) & TypeObstacle; }
 	inline bool isFluid(int idx) const { return get(idx) & TypeFluid; }
 	inline bool isFluid(int i, int j, int k) const { return get(i,j,k) & TypeFluid; }
-	inline bool isFluid(const Vec3i& pos) const { return get(pos) & TypeFluid; }
+	PYTHON() inline bool isFluid(const Vec3i& pos) const { return get(pos) & TypeFluid; }
 	inline bool isFluid(const Vec3& pos) const { return getAt(pos) & TypeFluid; }
 	inline bool isInflow(int idx) const { return get(idx) & TypeInflow; }
 	inline bool isInflow(int i, int j, int k) const { return get(i,j,k) & TypeInflow; }
+	inline bool isInflow(const Vec3i& pos) const { return get(pos) & TypeInflow; }
+	inline bool isInflow(const Vec3& pos) const { return getAt(pos) & TypeInflow; }
     inline void setInflow(int i, int j, int k) { setData(i, j, k, TypeInflow); }
     inline void setStick(int i, int j, int k) { setData(i, j, k, TypeStick); }
     inline void setOutflow(int i, int j, int k) { setData(i, j, k, TypeOutflow); } 
-	inline bool isInflow(const Vec3i& pos) const { return get(pos) & TypeInflow; }
-	inline bool isInflow(const Vec3& pos) const { return getAt(pos) & TypeInflow; }
 	inline bool isEmpty(int idx) const { return get(idx) & TypeEmpty; }
 	inline bool isEmpty(int i, int j, int k) const { return get(i,j,k) & TypeEmpty; }
 	inline bool isEmpty(const Vec3i& pos) const { return get(pos) & TypeEmpty; }

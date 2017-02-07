@@ -122,14 +122,6 @@ for simnum in range(numSims):
 		
 
 		
-		filename = "%03d.bin" % t
-		fullFilename = directory + "/" + filename
-		writeOutSim(fullFilename,t,vel, pressure)
-		
-		if(tt < numFrames):
-			filename = "%03d.bin" % t
-			f = "../../fluid_solver/cmake/%03d.bin" % tt;
-			writeOutSim(f,t,vel, pressure)
 		tt = tt + 1
 		
 		sm.step()

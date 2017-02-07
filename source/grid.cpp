@@ -21,6 +21,8 @@
 #include <fstream>
 #include <iostream>
 #include <stdint.h>
+#include <random>
+#include <memory>
 
 using namespace std;
 namespace Manta {
@@ -267,6 +269,24 @@ KERNEL(idx) template<class T> void knGridAddConstReal (Grid<T>& me, T val) { me[
 KERNEL(idx) template<class T> void knGridMultConst (Grid<T>& me, T val) { me[idx] *= val; }
 KERNEL(idx) template<class T> void knGridClamp (Grid<T>& me, T min, T max) { me[idx] = clamp( me[idx], min, max); }
 
+KERNEL(idx) void knGridRandomInt (Grid<int>& me, std::mt19937& eng,
+                                  std::uniform_int_distribution<int>& dist) {
+  me[idx] = dist(eng);
+}
+
+KERNEL(idx) void knGridRandomReal (Grid<Real>& me, std::mt19937& eng,
+                                   std::uniform_real_distribution<Real>& dist) {
+  me[idx] = dist(eng);
+}
+
+KERNEL(idx) void knGridRandomVec3 (Grid<Vec3>& me, std::mt19937& eng,
+                                   std::uniform_real_distribution<Real>& dist) {
+  me[idx].x = dist(eng);
+  me[idx].y = dist(eng);
+  me[idx].z = dist(eng);
+}
+
+
 template<class T> void Grid<T>::add(const Grid<T>& a) {
 	gridAdd<T,T>(*this, a);
 }
@@ -292,6 +312,27 @@ template<class T> void Grid<T>::mult(const Grid<T>& a) {
 
 template<class T> void Grid<T>::clamp(Real min, Real max) {
 	knGridClamp<T> (*this, T(min), T(max) );
+}
+
+template<> void Grid<int>::random(Real min, Real max, int seed) {
+  std::mt19937 engine(seed);
+  std::uniform_int_distribution<int> dist(static_cast<int>(min),
+                                          static_cast<int>(max));
+  knGridRandomInt (*this, engine, dist);
+}
+
+template<> void Grid<Real>::random(Real min, Real max, int seed) {
+  std::mt19937 engine(seed);
+  std::uniform_real_distribution<Real> dist(static_cast<Real>(min),
+                                            static_cast<Real>(max));
+  knGridRandomReal (*this, engine, dist);
+}
+
+template<> void Grid<Vec3>::random(Real min, Real max, int seed) {
+  std::mt19937 engine(seed);
+  std::uniform_real_distribution<Real> dist(static_cast<Real>(min),
+                                            static_cast<Real>(max));
+  knGridRandomVec3 (*this, engine, dist);
 }
 
 template<> Real Grid<Real>::getMax() {
@@ -429,13 +470,13 @@ PYTHON() void resetUvGrid (Grid<Vec3> &target)
 {
 	knResetUvGrid reset(target); // note, llvm complains about anonymous declaration here... ?
 }
-PYTHON() void updateUvWeight(Real resetTime, int index, int numUvs, Grid<Vec3> &uv , bool info=false)
+PYTHON() void updateUvWeight(Real resetTime, int index, int numUvs, Grid<Vec3> &uv)
 {
 	const Real t   = uv.getParent()->getTime();
 	Real  timeOff  = resetTime/(Real)numUvs;
 
 	Real lastt = computeUvGridTime(t +(Real)index*timeOff - uv.getParent()->getDt(), resetTime);
-	Real currt = computeUvGridTime(t +(Real)index*timeOff                  , resetTime);
+	Real currt = computeUvGridTime(t +(Real)index*timeOff                          , resetTime);
 	Real uvWeight = computeUvRamp(currt);
 
 	// normalize the uvw weights , note: this is a bit wasteful...
@@ -454,7 +495,7 @@ PYTHON() void updateUvWeight(Real resetTime, int index, int numUvs, Grid<Vec3> &
 	uv[0] = Vec3( uvWeight, 0.,0.);
 
 	// print info about uv weights?
-	if(info) debMsg("Uv grid "<<index<<"/"<<numUvs<< " t="<<currt<<" w="<<uvWeight<<", reset:"<<(int)(currt<lastt) , 1);
+	debMsg("Uv grid "<<index<<"/"<<numUvs<< " t="<<currt<<" w="<<uvWeight<<", reset:"<<(int)(currt<lastt) , 2);
 }
 
 KERNEL() template<class T> void knSetBoundary (Grid<T>& grid, T value, int w) { 
@@ -698,9 +739,7 @@ void FlagGrid::loadGeomFromVboxFile(std::string file) {
   }
 
   // First load in the data at the original resolution.
-  // std::unique_ptr<float[]> geom(new float[resx * resy * resz]);
-  // no c++ 11 :-(
-  float* geom = new float[resx * resy * resz];
+  std::unique_ptr<float[]> geom(new float[resx * resy * resz]);
   input.read((char*)&geom[0], sizeof(geom[0]) * resx * resy * resz);
 
   // Now copy the flags over by nearest neighbor lookup.
@@ -723,8 +762,6 @@ void FlagGrid::loadGeomFromVboxFile(std::string file) {
       }
     }
   }
-
-  delete[] geom;
 }
 
 void FlagGrid::initBoundaries(const int &boundaryWidth, const int *types) {

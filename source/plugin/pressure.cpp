@@ -62,7 +62,7 @@ void CorrectVelocity(FlagGrid& flags, MACGrid& vel, Grid<Real>& pressure)
       // way to make sure we're never marking flags as empty (otherwise our own
       // velocity update code will break). (i.e. We DO NOT handle the empty
       // cell case).
-      printf("isEmpty (i, j, k) = (%d, %d, %d)\n", i, j, k);
+      printf("isEmpty (i, j, k) = (%d, %d, %d) - NOT EXPECTED!\n", i, j, k);
     }
 	if (flags.isFluid(idx))
 	{
@@ -193,6 +193,31 @@ int CountEmptyCells(FlagGrid& flags) {
 // *****************************************************************************
 // Main pressure solve
 
+//! Export makeRhs so that we can test our divergence routines in tfluids.
+PYTHON() void makeRhs(MACGrid& vel, FlagGrid& flags, Grid<Real>& rhs,
+                      Grid<Real>* perCellCorr = 0,
+                      MACGrid* fractions = 0,
+                      bool enforceCompatibility = false) {
+  // compute divergence and init right hand side
+  MakeRhs kernMakeRhs (flags, rhs, vel, perCellCorr, fractions);
+
+  if (enforceCompatibility)
+  rhs += (Real)(-kernMakeRhs.sum / (Real)kernMakeRhs.cnt);
+}
+
+//! Export correctVelocity so that we can test our routine in tfluids.
+PYTHON() void correctVelocity(MACGrid& vel, FlagGrid& flags,
+                              Grid<Real>& pressure,
+                              Grid<Real>* phi = 0,
+                              Real gfClamp = 1e-04) {
+  CorrectVelocity(flags, vel, pressure );
+  if (phi) {
+    CorrectVelocityGhostFluid (vel, flags, pressure, *phi, gfClamp);
+    // improve behavior of clamping for large time steps:
+    ReplaceClampedGhostFluidVels (vel, flags, pressure, *phi, gfClamp);
+  }
+}
+
 //! Perform pressure projection of the velocity grid
 PYTHON() Real solvePressure(MACGrid& vel, Grid<Real>& pressure, FlagGrid& flags,
                      Grid<Real>* phi = 0, 
@@ -276,12 +301,16 @@ PYTHON() Real solvePressure(MACGrid& vel, Grid<Real>& pressure, FlagGrid& flags,
 
 	for (int iter=0; iter<maxIter; iter++) {
 		if (!gcg->iterate()) iter=maxIter;
-	}
-
+	} 
     Real res = gcg->getSigma();
-
-	debMsg("FluidSolver::solvePressure iterations:"<<gcg->getIterations()<<", res:" << res, 1);
+	debMsg("FluidSolver::solvePressure iterations:"<<gcg->getIterations()<<", res:"<<res, 1);
 	delete gcg;
+
+    if (isnan(res)) {
+       std::cout << "FluidSolver::solvePressure skipping CorrectVelocity "
+                 << "since res is nan!" << std::endl;
+       return res;
+    }
 	
 	CorrectVelocity(flags, vel, pressure ); 
 	if (phi) {
@@ -297,25 +326,17 @@ PYTHON() Real solvePressure(MACGrid& vel, Grid<Real>& pressure, FlagGrid& flags,
 	if(retRhs) {
 		retRhs->copyFrom( rhs );
 	}
-
     return res;
 }
+
   
-PYTHON() void writeOutSim(const std::string& name, const int frame,
+PYTHON() void writeOutSim(const std::string& filename,
                           MACGrid& vel, Grid<Real>& pressure,
-                          FlagGrid& flags)
-{
-  writeCustomFormat<MACGrid>(name, frame, vel, pressure, flags);
+                          Grid<Real>& density,
+                          FlagGrid& flags) {
+  writeCustomFormat(filename, vel, pressure, density, flags);
 }
-  
-PYTHON() void writeOutSimVec3(const std::string& name, const int frame,
-                          Grid<Vec3>& vel, Grid<Real>& pressure,
-                          FlagGrid& flags)
-{
-  writeCustomFormat<Grid<Vec3> >(name, frame, vel, pressure, flags);
-}
-
-
+ 
 
 } // end namespace
 

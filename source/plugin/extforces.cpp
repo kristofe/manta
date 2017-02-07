@@ -54,20 +54,20 @@ PYTHON() void addGravity(FlagGrid& flags, MACGrid& vel, Vec3 gravity) {
 	KnAddForce(flags, vel, f);
 }
 
-//! add Buoyancy force based on smoke density
-KERNEL(bnd=1) void KnAddBuoyancy(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, Vec3 strength) {    
+//! kernel to add Buoyancy force 
+KERNEL(bnd=1) void KnAddBuoyancy(FlagGrid& flags, Grid<Real>& factor, MACGrid& vel, Vec3 strength) {    
 	if (!flags.isFluid(i,j,k)) return;
 	if (flags.isFluid(i-1,j,k))
-		vel(i,j,k).x += (0.5 * strength.x) * (density(i,j,k)+density(i-1,j,k));
+		vel(i,j,k).x += (0.5 * strength.x) * (factor(i,j,k)+factor(i-1,j,k));
 	if (flags.isFluid(i,j-1,k))
-		vel(i,j,k).y += (0.5 * strength.y) * (density(i,j,k)+density(i,j-1,k));
+		vel(i,j,k).y += (0.5 * strength.y) * (factor(i,j,k)+factor(i,j-1,k));
 	if (vel.is3D() && flags.isFluid(i,j,k-1))
-		vel(i,j,k).z += (0.5 * strength.z) * (density(i,j,k)+density(i,j,k-1));    
+		vel(i,j,k).z += (0.5 * strength.z) * (factor(i,j,k)+factor(i,j,k-1));    
 }
 
-//! add Buoyancy force based on smoke density
-PYTHON() void addBuoyancy(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, Vec3 gravity) {
-	Vec3 f = - gravity * flags.getParent()->getDt() / flags.getParent()->getDx();
+//! add Buoyancy force based on fctor (e.g. smoke density)
+PYTHON() void addBuoyancy(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, Vec3 gravity, Real coefficient=1.) {
+	Vec3 f = -gravity * flags.getParent()->getDt() / flags.getParent()->getDx() * coefficient;
 	KnAddBuoyancy(flags,density, vel, f);
 }
 
@@ -149,7 +149,7 @@ void setPlumeBoundYFace(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int 
             flags.setInflow(xarr, yarr, zarr);
             density(xarr, yarr, zarr) = scale;
             Vec3 velPlume(0, yvel, 0);
-            vel.setDataKDS(pos, velPlume);
+            vel.setDataCentered(pos, velPlume);
           } else {
             // Leave a 1 pixel air space to prevent velocity curling back down
           }
@@ -197,7 +197,7 @@ void setPlumeBoundXFace(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int 
             flags.setInflow(xarr, yarr, zarr);
             density(xarr, yarr, zarr) = scale;
             Vec3 velPlume(xvel, 0, 0);
-            vel.setDataKDS(pos, velPlume);
+            vel.setDataCentered(pos, velPlume);
           } else {
             // Leave a 1 pixel air space to prevent velocity curling back down
           }
@@ -245,7 +245,7 @@ void setPlumeBoundZFace(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, int 
             flags.setInflow(xarr, yarr, zarr);
             density(xarr, yarr, zarr) = scale;
             Vec3 velPlume(0, 0, zvel);
-            vel.setDataKDS(pos, velPlume);
+            vel.setDataCentered(pos, velPlume);
           } else {
             // Leave a 1 pixel air space to prevent velocity curling back down
           }
@@ -277,6 +277,7 @@ PYTHON() void setPlumeBound(FlagGrid& flags, Grid<Real>& density, MACGrid& vel, 
     return;
   }
 }
+
 
 //! delete fluid and ensure empty flag in outflow cells, delete particles and density and set phi to 0.5
 PYTHON() void resetOutflow(FlagGrid& flags, Grid<Real>* phi = 0, BasicParticleSystem* parts = 0, Grid<Real>* real = 0, Grid<int>* index = 0, ParticleIndexSystem* indexSys = 0){
@@ -358,8 +359,9 @@ KERNEL() void KnSetWallBcs(FlagGrid& flags, MACGrid& vel) {
 	}
 }
 
+//! set wall BCs for fill fraction mode, note - only needs obstacle SDF
 KERNEL() void KnSetWallBcsFrac(FlagGrid& flags, MACGrid& vel, MACGrid& velTarget,
-							MACGrid* fractions, Grid<Real>* phiObs, const int &boundaryWidth=0) 
+							Grid<Real>* phiObs, const int &boundaryWidth=0) 
 { 
 	bool curFluid = flags.isFluid(i,j,k);
 	bool curObs   = flags.isObstacle(i,j,k);
@@ -444,13 +446,13 @@ KERNEL() void KnSetWallBcsFrac(FlagGrid& flags, MACGrid& vel, MACGrid& velTarget
 }
 
 //! set zero normal velocity boundary condition on walls
-// (optionally with second order accuracy using the fill fraction grid)
+// (optionally with second order accuracy using the obstacle SDF , fractions grid currentlyl not needed)
 PYTHON() void setWallBcs(FlagGrid& flags, MACGrid& vel, MACGrid* fractions = 0, Grid<Real>* phiObs = 0, int boundaryWidth=0) {
-	if(!fractions || !phiObs) {
+	if(!phiObs) {
 		KnSetWallBcs(flags, vel);
 	} else {
 		MACGrid tmpvel(vel.getParent());
-		KnSetWallBcsFrac(flags, vel, tmpvel, fractions, phiObs, boundaryWidth);
+		KnSetWallBcsFrac(flags, vel, tmpvel, phiObs, boundaryWidth);
 		vel.swap(tmpvel);
 	}
 }
@@ -475,16 +477,5 @@ PYTHON() void vorticityConfinement(MACGrid& vel, FlagGrid& flags, Real strength)
 	KnConfForce(force, norm, curl, strength);
 	KnAddForceField(flags, vel, force);
 }
-//! add Forces between fl/fl and fl/em cells
-KERNEL(bnd=1) void KnSetForce(FlagGrid& flags, MACGrid& vel, Vec3 force) {
-		vel(i,j,k).x = force.x;
-		vel(i,j,k).y = force.y;
-		vel(i,j,k).z = force.z;
-}
 
-//! add gravity forces to all fluid cells
-PYTHON() void setForce(FlagGrid& flags, MACGrid& vel, Vec3 force) {    
-	Vec3 f = force * flags.getParent()->getDt() / flags.getDx();
-	KnSetForce(flags, vel, f);
-}
 } // namespace
