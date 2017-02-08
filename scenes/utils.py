@@ -3,7 +3,7 @@
 import gc
 from manta import *
 import os, shutil, math, sys, random
-from Emitter import *
+#from Emitter import *
 from voxel_utils import VoxelUtils
 import utils
 import binvox_rw

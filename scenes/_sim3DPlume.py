@@ -40,6 +40,7 @@ for k, v in vars(args).items():
   print("  %s: %s" % (k, v))
 print("\n")
 
+utils.bWidth = 1
 baseRes = args.resolution
 res = baseRes + 2 * utils.bWidth  # Note: bWidth is 0 by default.
 gridSize = vec3(res, res, res)
@@ -69,14 +70,18 @@ if (GUI):
 totalFrames = args.numFrames
 curFrame = 0
 
-utils.InitDomain(flags, utils.bWidth, dim)
+#utils.InitDomain(flags, utils.bWidth, dim)
+flags.initDomain(boundaryWidth=utils.bWidth)
+flags.fillGrid()
+setOpenBound(flags, utils.bWidth, "xXyYzZ", FlagOutflow|FlagEmpty)
+
 
 plumeRad = 0.15  # Should match rad in fluid_net_3d_sim.
 plumeScale = args.plumeScale
 plumeUp = True
 plumeFace = 'y'
-setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale, plumeUp,
-              plumeFace)
+#setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale, plumeUp,
+#              plumeFace)
 
 if args.loadVoxelModel == "none":
   outDir = "../../blender/mushroom_cloud_render/"
@@ -89,6 +94,11 @@ elif args.loadVoxelModel == "bunny":
   flags.loadGeomFromVboxFile(outDir + "/geom_output.vbox")
 else:
   raise Exception("Bad args.loadVoxelModel value")
+
+# Do I set the outflow here where it will effect the geom file that is written
+# to disk?
+#setOpenBound(flags, utils.bWidth, "yY", FlagOutflow|FlagEmpty)
+source = sm.create(Cylinder, center=res*vec3(0.5, 0.1, 0.4), radius=res*plumeRad, z=res*vec3(0, 0.05, 0))
 
 def writeInt32(fileHandle, val):
   fileHandle.write(struct.pack('i', val))
@@ -115,6 +125,8 @@ geomFile.close()
 for t in range(args.numFrames):
   print("Simulating frame %d of %d (total)" % (curFrame + 1, totalFrames))
 
+  source.applyToGrid(grid=density, value=1)
+
   advectSemiLagrange(flags=flags, vel=vel, grid=density,
                      order=args.advectionOrder,
                      orderSpace=args.advectionOrderSpace)
@@ -122,10 +134,11 @@ for t in range(args.numFrames):
                      openBounds=True, boundaryWidth=utils.bWidth,
                      orderSpace=args.advectionOrderSpace)
  
+  resetOutflow(flags=flags, real=density)
   setWallBcs(flags=flags, vel=vel)
 
-  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
-                plumeUp, plumeFace)
+#  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
+#                plumeUp, plumeFace)
 
   bStrength = -(sm.dx() / 4) * args.buoyancyScale
   print("  Using buoyancy strength: %f" % (bStrength))
@@ -133,12 +146,13 @@ for t in range(args.numFrames):
               flags=flags)
 
   vStrength = sm.dx() * args.vorticityConfinementAmp
-  print("  Using vorticity confinement strength: %f" % (vStrength))
+#  print("  Using vorticity confinement strength: %f" % (vStrength))
   vorticityConfinement(vel=vel, flags=flags, strength=vStrength) 
 
-  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
-                plumeUp, plumeFace)
+#  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
+#                plumeUp, plumeFace)
   setWallBcs(flags=flags, vel=vel)
+  resetOutflow(flags=flags, real=density)
 
   residue = solvePressure(flags=flags, vel=vel, pressure=pressure, 
                           cgMaxIterFac=utils.cgMaxIterFac,
@@ -150,9 +164,10 @@ for t in range(args.numFrames):
  
   # Important, must come AFTER write to file.
   setWallBcs(flags=flags, vel=vel)
-  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
-                plumeUp, plumeFace)
+#  setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale,
+#                plumeUp, plumeFace)
 
+  resetOutflow(flags=flags, real=density)
   sm.step()
 
   # Write out the sim state.
