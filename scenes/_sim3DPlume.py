@@ -70,19 +70,19 @@ if (GUI):
 totalFrames = args.numFrames
 curFrame = 0
 
-#utils.InitDomain(flags, utils.bWidth, dim)
 flags.initDomain(boundaryWidth=utils.bWidth)
 flags.fillGrid()
 setOpenBound(flags, utils.bWidth, "xXyYzZ", FlagOutflow|FlagEmpty)
 
 
+'''
 plumeRad = 0.15  # Should match rad in fluid_net_3d_sim.
 plumeScale = args.plumeScale
 plumeUp = True
 plumeFace = 'y'
 #setPlumeBound(flags, density, vel, utils.bWidth, plumeRad, plumeScale, plumeUp,
 #              plumeFace)
-
+'''
 if args.loadVoxelModel == "none":
   outDir = "../../blender/mushroom_cloud_render/"
   # No geometry for the mushroom cloud.
@@ -98,7 +98,7 @@ else:
 # Do I set the outflow here where it will effect the geom file that is written
 # to disk?
 #setOpenBound(flags, utils.bWidth, "yY", FlagOutflow|FlagEmpty)
-source = sm.create(Cylinder, center=res*vec3(0.5, 0.1, 0.4), radius=res*plumeRad, z=res*vec3(0, 0.05, 0))
+source = sm.create(Cylinder, center=res*vec3(0.5, 0.1, 0.4), radius=res*0.15, z=res*vec3(0, 0.05, 0))
 
 def writeInt32(fileHandle, val):
   fileHandle.write(struct.pack('i', val))

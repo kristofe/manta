@@ -306,7 +306,7 @@ PYTHON() Real solvePressure(MACGrid& vel, Grid<Real>& pressure, FlagGrid& flags,
 	debMsg("FluidSolver::solvePressure iterations:"<<gcg->getIterations()<<", res:"<<res, 1);
 	delete gcg;
 
-    if (isnan(res)) {
+    if (std::isnan(res)) {
        std::cout << "FluidSolver::solvePressure skipping CorrectVelocity "
                  << "since res is nan!" << std::endl;
        return res;
